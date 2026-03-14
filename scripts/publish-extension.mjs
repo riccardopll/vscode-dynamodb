@@ -10,15 +10,15 @@ const packageJson = JSON.parse(
 
 loadEnvFile(join(rootDir, ".env"));
 
-const vsceToken = process.env.VSCE_PAT ?? process.env.PUBLISHER_TOKEN;
-const ovsxToken = process.env.OPENVSX_PAT ?? process.env.OVSX_PAT;
+const vsceToken = process.env.VSCE_PAT;
+const ovsxToken = process.env.OVSX_PAT;
 const vsixPath = join(
   rootDir,
   `${packageJson.name}-${packageJson.version}.vsix`,
 );
 
-assertToken(vsceToken, "VSCE_PAT or PUBLISHER_TOKEN");
-assertToken(ovsxToken, "OPENVSX_PAT or OVSX_PAT");
+assertToken(vsceToken, "VSCE_PAT");
+assertToken(ovsxToken, "OVSX_PAT");
 
 run("npm", ["run", "build"]);
 runBinary("vsce", ["package", "--no-dependencies", "--out", vsixPath]);
@@ -42,7 +42,9 @@ runBinary("ovsx", [
 
 function assertToken(token, variableName) {
   if (!token) {
-    throw new Error(`Missing ${variableName} in ${join(rootDir, ".env")}`);
+    throw new Error(
+      `Missing ${variableName} in the environment or ${join(rootDir, ".env")}`,
+    );
   }
 }
 

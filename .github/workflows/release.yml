@@ -36,7 +36,7 @@ jobs:
       - name: Publish to VS Code Marketplace and Open VSX
         run: npm run publish
         env:
-          PUBLISHER_TOKEN: ${{ secrets.PUBLISHER_TOKEN }}
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
 
       - name: Create GitHub release
