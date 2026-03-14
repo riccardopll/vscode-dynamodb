@@ -4,13 +4,31 @@
   "version": "0.0.1",
   "description": "Browse DynamoDB tables in VS Code",
   "categories": [
-    "Other"
+    "Other",
+    "Visualization"
   ],
+  "keywords": [
+    "dynamodb",
+    "aws",
+    "nosql",
+    "database",
+    "explorer",
+    "tables",
+    "scan",
+    "query"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/riccardopll/vscode-dynamodb.git"
+  },
+  "license": "MIT",
+  "publisher": "riccardopll",
   "main": "./dist/extension.js",
   "scripts": {
     "build": "tsc --noEmit && svelte-check --fail-on-warnings && node scripts/build-extension.mjs && vite build",
     "dev": "node scripts/dev.mjs",
     "lint": "prettier --write . && eslint src --fix",
+    "publish": "node scripts/publish-extension.mjs",
     "test": "npm run build && tsc -p tsconfig.test.json && npm run lint && vscode-test"
   },
   "contributes": {
@@ -73,9 +91,11 @@
     "@types/vscode": "^1.110.0",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.6.2",
     "esbuild": "^0.27.3",
     "eslint": "^9.39.3",
     "eslint-config-prettier": "^10.1.8",
+    "ovsx": "^0.10.6",
     "prettier": "3.8.1",
     "prettier-plugin-svelte": "^3.4.0",
     "svelte": "^5.53.12",

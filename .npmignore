@@ -1,0 +1,13 @@
+.env
+.env.*
+.DS_Store
+.github/
+.node-version
+.prettierignore
+.prettierrc
+AGENTS.md
+.vscode-test/
+.vscode-dev-user-data/
+.vscode-dev-extensions/
+coverage/
+*.vsix

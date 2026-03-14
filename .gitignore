@@ -6,4 +6,6 @@ out/
 .vscode-dev-extensions/
 coverage/
 *.vsix
+.env
+.env.*
 .DS_Store
