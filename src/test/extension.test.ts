@@ -1,15 +1,27 @@
 import * as assert from "assert";
 
-// You can import and use all API from the 'vscode' module
-// as well as import your extension to test it
 import * as vscode from "vscode";
-// import * as myExtension from '../../extension';
 
 suite("Extension Test Suite", () => {
-  vscode.window.showInformationMessage("Start all tests.");
+  test("registers DynamoDB commands on activation", async function () {
+    // Activation does real filesystem and extension-host work.
+    // The default Mocha timeout is too tight for VS Code integration tests.
+    this.timeout(10_000);
 
-  test("Sample test", () => {
-    assert.strictEqual(-1, [1, 2, 3].indexOf(5));
-    assert.strictEqual(-1, [1, 2, 3].indexOf(0));
+    try {
+      await vscode.commands.executeCommand(
+        "dynamodb.openTableExplorer",
+        "TestTable",
+      );
+    } catch {
+      // The command may fail before opening a table, but activation still happens.
+    }
+
+    const commands = await vscode.commands.getCommands(true);
+    assert.ok(commands.includes("dynamodb.selectProfile"));
+    assert.ok(commands.includes("dynamodb.selectRegion"));
+    assert.ok(commands.includes("dynamodb.refreshProfiles"));
+    assert.ok(commands.includes("dynamodb.refreshTables"));
+    assert.ok(commands.includes("dynamodb.openTableExplorer"));
   });
 });

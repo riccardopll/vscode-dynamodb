@@ -1,39 +1,73 @@
 {
-  "name": "vscode-dynamodb-kit",
-  "displayName": "vscode-dynamodb-kit",
-  "description": "",
+  "name": "vscode-dynamodb-explorer",
+  "displayName": "DynamoDB Explorer",
   "version": "0.0.1",
-  "engines": {
-    "vscode": "^1.110.0"
-  },
+  "description": "Browse DynamoDB tables in VS Code",
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
   "main": "./dist/extension.js",
+  "scripts": {
+    "build": "tsc --noEmit && svelte-check --fail-on-warnings && node scripts/build-extension.mjs && vite build",
+    "dev": "node scripts/dev.mjs",
+    "lint": "prettier --write . && eslint src --fix",
+    "test": "npm run build && tsc -p tsconfig.test.json && npm run lint && vscode-test"
+  },
   "contributes": {
     "commands": [
       {
-        "command": "vscode-dynamodb-kit.helloWorld",
-        "title": "Hello World"
+        "command": "dynamodb.openTableExplorer",
+        "title": "Open Table Explorer"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "DynamoDB Explorer",
+      "properties": {
+        "dynamodb.defaultRegion": {
+          "type": "string",
+          "default": "us-east-1",
+          "description": "Fallback AWS region when the selected profile does not define one."
+        },
+        "dynamodb.pageSize": {
+          "type": "number",
+          "default": 50,
+          "minimum": 1,
+          "maximum": 500,
+          "description": "Maximum number of DynamoDB items to load per request."
+        }
+      }
+    },
+    "views": {
+      "dynamodb": [
+        {
+          "id": "dynamodbConnection",
+          "name": "Connection",
+          "icon": "media/db.svg"
+        },
+        {
+          "id": "dynamodbTables",
+          "name": "Tables",
+          "icon": "media/db.svg"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "dynamodb",
+          "title": "DynamoDB",
+          "icon": "media/db.svg"
+        }
+      ]
+    }
   },
-  "scripts": {
-    "vscode:prepublish": "npm run package",
-    "compile": "npm run check-types && npm run lint && node esbuild.js",
-    "watch": "npm-run-all -p watch:*",
-    "watch:esbuild": "node esbuild.js --watch",
-    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
-    "package": "npm run check-types && npm run lint && node esbuild.js --production",
-    "compile-tests": "tsc -p . --outDir out",
-    "watch-tests": "tsc -p . -w --outDir out",
-    "pretest": "npm run compile-tests && npm run compile && npm run lint",
-    "check-types": "tsc --noEmit",
-    "lint": "npx prettier . --write && npx eslint src --fix",
-    "test": "vscode-test"
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.918.0",
+    "@aws-sdk/credential-provider-ini": "^3.918.0",
+    "@aws-sdk/util-dynamodb": "^3.918.0"
   },
   "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^6.1.3",
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
     "@types/vscode": "^1.110.0",
@@ -42,9 +76,15 @@
     "esbuild": "^0.27.3",
     "eslint": "^9.39.3",
     "eslint-config-prettier": "^10.1.8",
-    "npm-run-all": "^4.1.5",
     "prettier": "3.8.1",
+    "prettier-plugin-svelte": "^3.4.0",
+    "svelte": "^5.53.12",
+    "svelte-check": "^4.4.5",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.56.1"
+    "typescript-eslint": "^8.56.1",
+    "vite": "^7.3.1"
+  },
+  "engines": {
+    "vscode": "^1.110.0"
   }
 }

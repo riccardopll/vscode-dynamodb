@@ -2,6 +2,8 @@ node_modules/
 dist/
 out/
 .vscode-test/
+.vscode-dev-user-data/
+.vscode-dev-extensions/
 coverage/
 *.vsix
 .DS_Store

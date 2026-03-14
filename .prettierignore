@@ -2,4 +2,6 @@ dist
 out
 node_modules
 .vscode-test
+.vscode-dev-user-data
+.vscode-dev-extensions
 coverage
