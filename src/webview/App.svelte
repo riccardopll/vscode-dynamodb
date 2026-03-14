@@ -2,13 +2,18 @@
   import { onMount } from "svelte";
 
   import type { DynamoCursor, ExplorerMode, IndexMetadata } from "../types";
-  import { appendResultRows, collectResultColumns } from "./results";
+  import { collectResultColumns } from "./results";
   import type {
     ExplorerBootstrap,
     ExtensionToWebviewMessage,
     WebviewToExtensionMessage,
   } from "./protocol";
   import ResultsTable from "./components/ResultsTable.svelte";
+
+  interface ResultPage {
+    items: Record<string, unknown>[];
+    nextCursor?: DynamoCursor;
+  }
 
   interface QueryRequestScan {
     type: "runScan";
@@ -34,20 +39,29 @@
   let selectedIndexName = bootstrap.metadata.globalSecondaryIndexes[0]?.name ?? "";
   let partitionKeyValue = "";
   let sortKeyValue = "";
-  let items: Record<string, unknown>[] = [];
-  let cursor: DynamoCursor;
+  let pages: ResultPage[] = [];
+  let currentPageIndex = 0;
   let loading = false;
   let error = "";
   let lastQuery: QueryRequest | undefined;
+  let pendingPageIndex: number | undefined;
 
   $: queryIndexes = bootstrap.metadata.globalSecondaryIndexes;
   $: selectedIndex = queryIndexes.find(
     (index) => index.name === selectedIndexName,
   );
+  $: currentPage = pages[currentPageIndex];
+  $: items = currentPage?.items ?? [];
   $: columns = collectResultColumns(items);
   $: hasResults = items.length > 0;
-  $: hasMore = Boolean(cursor);
   $: canRunQuery = Boolean(selectedIndex) && !loading;
+  $: canGoPrevious = !loading && currentPageIndex > 0;
+  $: canGoNext =
+    !loading &&
+    Boolean(
+      (currentPageIndex < pages.length - 1) || currentPage?.nextCursor,
+    );
+  $: currentPageNumber = currentPageIndex + 1;
 
   onMount(() => {
     const handleMessage = (
@@ -60,11 +74,31 @@
           loading = message.loading;
           return;
         case "error":
+          pendingPageIndex = undefined;
           error = message.message;
           return;
         case "results":
-          items = appendResultRows(items, message.items, message.append);
-          cursor = message.cursor;
+          if (message.append) {
+            const nextPageIndex = pendingPageIndex ?? pages.length;
+            pages = [
+              ...pages.slice(0, nextPageIndex),
+              {
+                items: message.items,
+                nextCursor: message.cursor,
+              },
+            ];
+            currentPageIndex = nextPageIndex;
+          } else {
+            pages = [
+              {
+                items: message.items,
+                nextCursor: message.cursor,
+              },
+            ];
+            currentPageIndex = 0;
+          }
+
+          pendingPageIndex = undefined;
       }
     };
 
@@ -139,9 +173,21 @@
   }
 
   function loadMore(): void {
-    if (!cursor || !lastQuery) {
+    if (!lastQuery) {
       return;
     }
+
+    if (currentPageIndex < pages.length - 1) {
+      currentPageIndex += 1;
+      return;
+    }
+
+    const cursor = currentPage?.nextCursor;
+    if (!cursor) {
+      return;
+    }
+
+    pendingPageIndex = currentPageIndex + 1;
 
     if (lastQuery.type === "runScan") {
       postMessage({
@@ -160,9 +206,18 @@
     });
   }
 
+  function showPreviousPage(): void {
+    if (currentPageIndex === 0 || loading) {
+      return;
+    }
+
+    currentPageIndex -= 1;
+  }
+
   function resetResults(): void {
-    items = [];
-    cursor = undefined;
+    pages = [];
+    currentPageIndex = 0;
+    pendingPageIndex = undefined;
     error = "";
   }
 
@@ -249,19 +304,14 @@
 
       <div class="actions">
         <button
+          aria-label={mode === "scan" ? "Run Scan" : "Run Query"}
           class="run-button"
           disabled={mode === "query-index" && !canRunQuery}
           on:click={runActiveRequest}
           type="button"
         >
-          {mode === "scan" ? "Run Scan" : "Run Query"}
+          ▶
         </button>
-
-        {#if hasMore}
-          <button class="secondary-button" disabled={loading} on:click={loadMore} type="button">
-            Load More
-          </button>
-        {/if}
       </div>
     </div>
 
@@ -273,6 +323,29 @@
       {/if}
       {#if loading}
         <span>Running...</span>
+      {/if}
+      {#if pages.length > 0}
+        <div aria-label="Pagination" class="pager" role="group">
+          <button
+            aria-label="Previous page"
+            class="pager-button"
+            disabled={!canGoPrevious}
+            on:click={showPreviousPage}
+            type="button"
+          >
+            ←
+          </button>
+          <span class="pager-label">Page {currentPageNumber}</span>
+          <button
+            aria-label="Next page"
+            class="pager-button"
+            disabled={!canGoNext}
+            on:click={loadMore}
+            type="button"
+          >
+            →
+          </button>
+        </div>
       {/if}
     </div>
 
@@ -405,7 +478,7 @@
   }
 
   .run-button,
-  .secondary-button {
+  .pager-button {
     min-height: 32px;
     padding: 0 12px;
     border: 1px solid var(--border);
@@ -418,9 +491,33 @@
     color: var(--accent-foreground);
   }
 
-  .secondary-button {
-    background: var(--surface);
+  .pager {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: auto;
+  }
+
+  .pager-button {
+    min-width: 32px;
+    min-height: 24px;
+    padding: 0 6px;
+    background: transparent;
+    color: var(--text-muted);
+    border: 0;
+  }
+
+  .pager-button:not(:disabled):hover {
     color: var(--text);
+  }
+
+  .pager-label {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 0 4px;
+    color: var(--text-muted);
+    white-space: nowrap;
   }
 
   .meta-row {

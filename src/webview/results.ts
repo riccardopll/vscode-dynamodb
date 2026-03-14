@@ -1,11 +1,3 @@
-export function appendResultRows(
-  currentRows: Record<string, unknown>[],
-  nextRows: Record<string, unknown>[],
-  append: boolean,
-): Record<string, unknown>[] {
-  return append ? [...currentRows, ...nextRows] : nextRows;
-}
-
 export function collectResultColumns(
   rows: Record<string, unknown>[],
 ): string[] {
