@@ -23,8 +23,22 @@ assertToken(ovsxToken, "OPENVSX_PAT or OVSX_PAT");
 run("npm", ["run", "build"]);
 runBinary("vsce", ["package", "--no-dependencies", "--out", vsixPath]);
 
-runBinary("vsce", ["publish", "--packagePath", vsixPath, "-p", vsceToken]);
-runBinary("ovsx", ["publish", "--packagePath", vsixPath, "-p", ovsxToken]);
+runBinary("vsce", [
+  "publish",
+  "--packagePath",
+  vsixPath,
+  "--skip-duplicate",
+  "-p",
+  vsceToken,
+]);
+runBinary("ovsx", [
+  "publish",
+  "--packagePath",
+  vsixPath,
+  "--skip-duplicate",
+  "-p",
+  ovsxToken,
+]);
 
 function assertToken(token, variableName) {
   if (!token) {

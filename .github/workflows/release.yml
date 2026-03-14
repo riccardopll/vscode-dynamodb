@@ -1,0 +1,47 @@
+name: Release Extension
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Set release version
+        run: |
+          VERSION="0.0.${GITHUB_RUN_NUMBER}"
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "VSIX_PATH=$(node -p \"const pkg = require('./package.json'); './' + pkg.name + '-' + pkg.version + '.vsix'\")" >> "$GITHUB_ENV"
+
+      - name: Publish to VS Code Marketplace and Open VSX
+        run: npm run publish
+        env:
+          PUBLISHER_TOKEN: ${{ secrets.PUBLISHER_TOKEN }}
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v${VERSION}" "${VSIX_PATH}" \
+            --title "v${VERSION}" \
+            --generate-notes
