@@ -1,7 +1,6 @@
 <script lang="ts">
   export let columns: string[];
   export let items: Record<string, unknown>[];
-  export let onCopyItem: (item: Record<string, unknown>) => void;
 
   function formatCell(value: unknown): string {
     if (value === null || value === undefined) {
@@ -17,118 +16,121 @@
 </script>
 
 <div class="table-shell">
-  <table>
-    <thead>
-      <tr>
-        {#each columns as column (column)}
-          <th>{column}</th>
-        {/each}
-        <th>actions</th>
-      </tr>
-    </thead>
-    <tbody>
-      {#each items as item, index (`${index}`)}
+  <div class="table-scroll">
+    <table>
+      <thead>
         <tr>
           {#each columns as column (column)}
-            <td>
-              <code>{formatCell(item[column])}</code>
-            </td>
+            <th>{column}</th>
           {/each}
-          <td class="action-cell">
-            <button on:click={() => onCopyItem(item)} type="button">copy</button>
-          </td>
         </tr>
-      {/each}
-    </tbody>
-  </table>
+      </thead>
+      <tbody>
+        {#each items as item, index (`${index}`)}
+          <tr>
+            {#each columns as column (column)}
+              <td title={formatCell(item[column])}>
+                <code>{formatCell(item[column])}</code>
+              </td>
+            {/each}
+          </tr>
+        {/each}
+      </tbody>
+    </table>
+  </div>
 </div>
 
 <style>
   .table-shell {
-    overflow: auto;
-    border: 1px solid
-      color-mix(
-        in srgb,
-        var(--vscode-panel-border, currentColor) 82%,
-        transparent
-      );
-    border-radius: 10px;
+    min-height: 100%;
   }
 
-  table {
-    width: max-content;
-    min-width: 100%;
-    border-collapse: collapse;
+  .table-shell,
+  .table-scroll {
+    min-height: 100%;
   }
 
-  th,
-  td {
-    padding: 10px 12px;
-    border-bottom: 1px solid
-      color-mix(
-        in srgb,
-        var(--vscode-panel-border, currentColor) 82%,
-        transparent
-      );
-    text-align: left;
-    vertical-align: top;
-    white-space: nowrap;
-  }
-
-  th {
-    position: sticky;
-    top: 0;
-    z-index: 1;
-    background: color-mix(
+  .table-scroll {
+    --header-height: 34px;
+    --row-odd: var(--vscode-editor-background);
+    --row-even: color-mix(
+      in srgb,
+      var(--vscode-editor-background) 90%,
+      var(--vscode-editor-foreground) 10%
+    );
+    --row-hover: color-mix(
       in srgb,
       var(--vscode-editor-background) 86%,
       var(--vscode-editor-foreground) 14%
     );
-    color: color-mix(
+    overflow: auto;
+  }
+
+  table {
+    width: max-content;
+    min-width: 0;
+    border-collapse: collapse;
+    table-layout: auto;
+  }
+
+  th,
+  td {
+    padding: 0;
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    max-width: 48ch;
+    text-align: left;
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+
+  thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    height: var(--header-height);
+    padding: 0 10px;
+    background: color-mix(
       in srgb,
-      var(--vscode-editor-foreground) 72%,
-      transparent
+      var(--vscode-editor-background) 92%,
+      var(--vscode-editor-foreground) 8%
     );
-    font-family:
-      ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
-    font-size: 0.76rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    color: var(--vscode-editor-foreground);
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
+  tbody tr:nth-child(odd) td {
+    background: var(--row-odd);
+  }
+
+  tbody tr:nth-child(even) td {
+    background: var(--row-even);
+  }
+
+  tbody tr:hover td {
+    background: var(--row-hover);
   }
 
   td code {
-    display: inline-block;
-    max-width: 44ch;
-    overflow-x: auto;
-    padding-bottom: 2px;
-    font-family:
-      ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
-    font-size: 0.86rem;
-    white-space: nowrap;
-    scrollbar-width: thin;
-  }
-
-  .action-cell {
-    width: 1%;
-  }
-
-  button {
-    min-height: 34px;
-    padding: 0 12px;
-    border: 1px solid
-      color-mix(
-        in srgb,
-        var(--vscode-panel-border, currentColor) 82%,
-        transparent
-      );
-    border-radius: 999px;
+    display: block;
+    max-width: 48ch;
+    min-width: 0;
+    margin: 0;
+    padding: 8px 10px;
+    overflow: hidden;
     background: transparent;
-    color: inherit;
-    cursor: pointer;
-  }
-
-  button:focus-visible {
-    outline: 1px solid var(--vscode-focusBorder, currentColor);
-    outline-offset: 2px;
+    border-radius: 0;
+    box-shadow: none;
+    color: var(--vscode-editor-foreground);
+    font-family: var(
+      --vscode-editor-font-family,
+      ui-monospace,
+      "SFMono-Regular",
+      monospace
+    );
+    font-size: 0.82rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 </style>
