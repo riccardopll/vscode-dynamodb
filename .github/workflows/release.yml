@@ -29,8 +29,9 @@ jobs:
         run: |
           VERSION="0.0.${GITHUB_RUN_NUMBER}"
           npm version "$VERSION" --no-git-tag-version --allow-same-version
+          VSIX_PATH=$(node -e "const pkg = require('./package.json'); process.stdout.write('./' + pkg.name + '-' + pkg.version + '.vsix')")
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          echo "VSIX_PATH=$(node -p \"const pkg = require('./package.json'); './' + pkg.name + '-' + pkg.version + '.vsix'\")" >> "$GITHUB_ENV"
+          echo "VSIX_PATH=$VSIX_PATH" >> "$GITHUB_ENV"
 
       - name: Publish to VS Code Marketplace and Open VSX
         run: npm run publish
