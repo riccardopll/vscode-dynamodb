@@ -62,7 +62,7 @@ export function formatEditableValue(value: unknown): string {
     return "";
   }
 
-  return JSON.stringify(value, null, isStructuredValue(value) ? 2 : 0);
+  return JSON.stringify(value);
 }
 
 export function isStructuredValue(value: unknown): boolean {

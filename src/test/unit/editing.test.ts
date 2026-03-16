@@ -26,6 +26,16 @@ suite("Webview editing helpers", () => {
     assert.strictEqual(formatEditableValue("hello"), "hello");
   });
 
+  test("formats structured editor values as single-line JSON", () => {
+    assert.strictEqual(
+      formatEditableValue({
+        active: true,
+        count: 2,
+      }),
+      '{"active":true,"count":2}',
+    );
+  });
+
   test("parses non-string values from JSON text", () => {
     assert.deepStrictEqual(
       parseEditedValue({ active: false }, '{"active":true}'),

@@ -9,8 +9,12 @@ interface IniSection {
   values: Record<string, string>;
 }
 
-const AWS_CONFIG_PATH = path.join(os.homedir(), ".aws", "config");
-const AWS_CREDENTIALS_PATH = path.join(os.homedir(), ".aws", "credentials");
+export const AWS_CONFIG_PATH = path.join(os.homedir(), ".aws", "config");
+export const AWS_CREDENTIALS_PATH = path.join(
+  os.homedir(),
+  ".aws",
+  "credentials",
+);
 
 export const KNOWN_DYNAMODB_REGIONS = [
   "af-south-1",

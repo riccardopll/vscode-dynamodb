@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
 
-  import type { DynamoCursor, ExplorerMode, IndexMetadata } from "../types";
+  import type { DynamoCursor, ExplorerMode } from "../types";
   import ResultsTable from "./components/ResultsTable.svelte";
   import {
     formatEditableValue,
@@ -77,7 +77,7 @@
   $: items = currentPage?.items ?? [];
   $: columns = collectResultColumns(
     items,
-    bootstrap.metadata.partitionKey.name,
+    bootstrap.metadata,
   );
   $: hasResults = items.length > 0;
   $: canRunQuery = Boolean(selectedIndex) && !loading;
@@ -472,12 +472,6 @@
     vscode.postMessage(message);
   }
 
-  function formatIndex(index: IndexMetadata): string {
-    return `${index.name}: ${index.partitionKey.name}${
-      index.sortKey ? ` / ${index.sortKey.name}` : ""
-    }`;
-  }
-
   function getEmptyMessage(): string {
     if (loading) {
       return "Loading rows...";
@@ -605,9 +599,6 @@
     <div class="meta-row">
       <span>{bootstrap.metadata.tableName}</span>
       <span>{bootstrap.pageSize} / page</span>
-      {#if mode === "query-index" && selectedIndex}
-        <span>{formatIndex(selectedIndex)}</span>
-      {/if}
       {#if busyLabel}
         <span>{busyLabel}</span>
       {/if}

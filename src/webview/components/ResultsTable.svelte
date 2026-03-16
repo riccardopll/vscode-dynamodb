@@ -9,7 +9,6 @@
     getRowKey,
     hasOwnColumn,
     isPartitionKeyColumn,
-    isStructuredValue,
   } from "../editing";
 
   interface UpdateCellDraftDetail {
@@ -47,6 +46,18 @@
     return !isPartitionKeyColumn(column, metadata) && hasOwnColumn(item, column);
   }
 
+  function getColumnRole(column: string): "PK" | "SK" | undefined {
+    if (column === metadata.partitionKey.name) {
+      return "PK";
+    }
+
+    if (column === metadata.sortKey?.name) {
+      return "SK";
+    }
+
+    return undefined;
+  }
+
   function getDraftValue(
     item: Record<string, unknown>,
     column: string,
@@ -58,6 +69,10 @@
     }
 
     return formatEditableValue(getDisplayValue(item, column));
+  }
+
+  function getEditorSize(item: Record<string, unknown>, column: string): number {
+    return Math.max(1, Math.min(getDraftValue(item, column).length, 48));
   }
 
   function isDirtyCell(rowKey: string, column: string): boolean {
@@ -83,6 +98,28 @@
       value,
     });
   }
+
+  function focusCellEditor(
+    cell: HTMLTableCellElement,
+    selectContents = false,
+  ): void {
+    if (busy) {
+      return;
+    }
+
+    const editor = cell.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+      "input, textarea",
+    );
+    if (!editor) {
+      return;
+    }
+
+    editor.focus();
+
+    if (selectContents) {
+      editor.select();
+    }
+  }
 </script>
 
 <div class="table-shell">
@@ -91,7 +128,14 @@
       <thead>
         <tr>
           {#each columns as column (column)}
-            <th class:key-column={isPartitionKeyColumn(column, metadata)}>{column}</th>
+            <th class:key-column={isPartitionKeyColumn(column, metadata)}>
+              <div class="header-cell">
+                <span>{column}</span>
+                {#if getColumnRole(column)}
+                  <span class="column-badge">{getColumnRole(column)}</span>
+                {/if}
+              </div>
+            </th>
           {/each}
         </tr>
       </thead>
@@ -106,28 +150,28 @@
                 class:dirty-cell={isDirtyCell(rowKey, column)}
                 class:invalid-cell={isInvalidCell(rowKey, column)}
                 class:key-cell={isPartitionKeyColumn(column, metadata)}
+                on:click={(event) => {
+                  if (editable) {
+                    focusCellEditor(event.currentTarget);
+                  }
+                }}
+                on:dblclick={(event) => {
+                  if (editable) {
+                    focusCellEditor(event.currentTarget, true);
+                  }
+                }}
                 title={formatCell(displayValue)}
               >
                 {#if editable}
-                  {#if isStructuredValue(item[column])}
-                    <textarea
-                      class="cell-editor cell-editor-textarea"
-                      disabled={busy}
-                      on:input={(event) =>
-                        updateCellDraft(item, column, event.currentTarget.value)}
-                      rows="4"
-                      value={getDraftValue(item, column)}
-                    ></textarea>
-                  {:else}
-                    <input
-                      class="cell-editor"
-                      disabled={busy}
-                      on:input={(event) =>
-                        updateCellDraft(item, column, event.currentTarget.value)}
-                      type="text"
-                      value={getDraftValue(item, column)}
-                    />
-                  {/if}
+                  <input
+                    class="cell-editor"
+                    disabled={busy}
+                    on:input={(event) =>
+                      updateCellDraft(item, column, event.currentTarget.value)}
+                    size={getEditorSize(item, column)}
+                    type="text"
+                    value={getDraftValue(item, column)}
+                  />
                 {:else}
                   <code class="cell-value">{formatCell(displayValue)}</code>
                 {/if}
@@ -196,6 +240,7 @@
 
   th,
   td {
+    position: relative;
     padding: 0;
     border-right: 1px solid var(--border);
     border-bottom: 1px solid var(--border);
@@ -226,6 +271,26 @@
     color: var(--vscode-textPreformat-foreground, var(--vscode-editor-foreground));
   }
 
+  .header-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+  }
+
+  .column-badge {
+    margin-left: auto;
+    color: var(
+      --vscode-descriptionForeground,
+      color-mix(in srgb, var(--vscode-editor-foreground) 72%, transparent)
+    );
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
   tbody tr:nth-child(odd) td {
     background: var(--row-odd);
   }
@@ -250,10 +315,18 @@
     background: var(--cell-invalid) !important;
   }
 
+  td:focus-within::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border: 1px solid
+      var(--vscode-focusBorder, var(--vscode-button-background));
+    pointer-events: none;
+  }
+
   .cell-value,
   .cell-editor {
     display: block;
-    width: 100%;
     max-width: 48ch;
     min-width: 0;
     margin: 0;
@@ -274,22 +347,20 @@
   }
 
   .cell-value {
+    line-height: 18px;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .cell-editor {
-    min-width: 220px;
-  }
-
-  .cell-editor-textarea {
-    min-height: 92px;
-    resize: vertical;
-    white-space: pre;
+    width: 100%;
+    height: 34px;
+    min-height: 34px;
+    line-height: 18px;
+    white-space: nowrap;
   }
 
   .cell-editor:focus-visible {
-    outline: 1px solid var(--vscode-focusBorder, var(--vscode-button-background));
-    outline-offset: -1px;
+    outline: none;
   }
 </style>

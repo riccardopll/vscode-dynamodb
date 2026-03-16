@@ -1,6 +1,8 @@
+import type { TableMetadata } from "../types";
+
 export function collectResultColumns(
   rows: Record<string, unknown>[],
-  primaryKeyName?: string,
+  metadata?: Pick<TableMetadata, "partitionKey" | "sortKey">,
 ): string[] {
   const keys = new Set<string>();
 
@@ -9,18 +11,28 @@ export function collectResultColumns(
   }
 
   return [...keys].sort((left, right) => {
-    if (!primaryKeyName) {
-      return left.localeCompare(right);
-    }
+    const leftRank = getColumnRank(left, metadata);
+    const rightRank = getColumnRank(right, metadata);
 
-    if (left === primaryKeyName) {
-      return -1;
-    }
-
-    if (right === primaryKeyName) {
-      return 1;
+    if (leftRank !== rightRank) {
+      return leftRank - rightRank;
     }
 
     return left.localeCompare(right);
   });
+}
+
+function getColumnRank(
+  column: string,
+  metadata?: Pick<TableMetadata, "partitionKey" | "sortKey">,
+): number {
+  if (column === metadata?.partitionKey.name) {
+    return 0;
+  }
+
+  if (column === metadata?.sortKey?.name) {
+    return 1;
+  }
+
+  return 2;
 }

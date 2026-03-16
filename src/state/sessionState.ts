@@ -10,6 +10,17 @@ import type {
 const ACTIVE_PROFILE_KEY = "dynamodb.activeProfile";
 const ACTIVE_REGIONS_KEY = "dynamodb.activeRegionByProfile";
 
+export function selectInitialProfile(
+  profiles: AwsProfileInfo[],
+  persistedProfileName: string | undefined,
+): AwsProfileInfo | undefined {
+  return (
+    profiles.find((profile) => profile.name === persistedProfileName) ??
+    profiles.find((profile) => profile.name === "default") ??
+    profiles[0]
+  );
+}
+
 export class SessionState {
   private readonly onDidChangeEmitter = new vscode.EventEmitter<void>();
   private profiles: AwsProfileInfo[] = [];
@@ -38,9 +49,13 @@ export class SessionState {
       return this.profiles;
     }
 
-    const nextProfile =
-      this.profiles.find((profile) => profile.name === persistedProfile) ??
-      this.profiles[0];
+    const nextProfile = selectInitialProfile(this.profiles, persistedProfile);
+    if (!nextProfile) {
+      this.connection = undefined;
+      this.tables = [];
+      this.onDidChangeEmitter.fire();
+      return this.profiles;
+    }
 
     await this.setActiveProfile(nextProfile.name, false);
 
