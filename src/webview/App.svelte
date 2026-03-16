@@ -625,29 +625,33 @@
           Save changes?
         </button>
       {/if}
-      {#if pages.length > 0}
-        <div aria-label="Pagination" class="pager" role="group">
-          <button
-            aria-label="Previous page"
-            class="pager-button"
-            disabled={!canGoPrevious}
-            on:click={showPreviousPage}
-            type="button"
-          >
-            ←
-          </button>
-          <span class="pager-label">Page {currentPageNumber}</span>
-          <button
-            aria-label="Next page"
-            class="pager-button"
-            disabled={!canGoNext}
-            on:click={loadMore}
-            type="button"
-          >
-            →
-          </button>
-        </div>
-      {/if}
+      <div
+        aria-hidden={pages.length === 0}
+        aria-label="Pagination"
+        class="pager"
+        class:pager-hidden={pages.length === 0}
+        role="group"
+      >
+        <button
+          aria-label="Previous page"
+          class="pager-button"
+          disabled={!canGoPrevious}
+          on:click={showPreviousPage}
+          type="button"
+        >
+          ←
+        </button>
+        <span class="pager-label">Page {currentPageNumber}</span>
+        <button
+          aria-label="Next page"
+          class="pager-button"
+          disabled={!canGoNext}
+          on:click={loadMore}
+          type="button"
+        >
+          →
+        </button>
+      </div>
     </div>
 
     {#if error}
@@ -656,24 +660,26 @@
   </section>
 
   <section class="results-panel">
-    {#if hasResults}
-      <ResultsTable
-        {columns}
-        {items}
-        metadata={bootstrap.metadata}
-        busy={loading}
-        dirtyRows={dirtyRowKeys}
-        {dirtyColumnsByRowKey}
-        {editedRowsByKey}
-        {cellDrafts}
-        {invalidCellKeys}
-        on:updateCellDraft={handleUpdateCellDraft}
-      />
-    {:else}
-      <div class="empty-state">
-        <p>{getEmptyMessage()}</p>
-      </div>
-    {/if}
+    <div class="results-content">
+      {#if hasResults}
+        <ResultsTable
+          {columns}
+          {items}
+          metadata={bootstrap.metadata}
+          busy={loading}
+          dirtyRows={dirtyRowKeys}
+          {dirtyColumnsByRowKey}
+          {editedRowsByKey}
+          {cellDrafts}
+          {invalidCellKeys}
+          on:updateCellDraft={handleUpdateCellDraft}
+        />
+      {:else}
+        <div class="empty-state">
+          <p>{getEmptyMessage()}</p>
+        </div>
+      {/if}
+    </div>
   </section>
 </div>
 
@@ -800,6 +806,11 @@
     margin-left: auto;
   }
 
+  .pager-hidden {
+    visibility: hidden;
+    pointer-events: none;
+  }
+
   .pager-button {
     min-width: 32px;
     min-height: 24px;
@@ -827,6 +838,7 @@
     align-items: center;
     gap: 12px;
     flex-wrap: wrap;
+    min-height: 24px;
     padding-top: 10px;
   }
 
@@ -856,16 +868,26 @@
   }
 
   .results-panel {
+    display: flex;
     flex: 1 1 auto;
     min-height: 0;
     overflow: hidden;
   }
 
+  .results-content {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    width: 100%;
+  }
+
   .empty-state {
     display: grid;
+    flex: 1 1 auto;
     place-items: center;
-    min-height: 100%;
-    padding: 24px;
+    width: 100%;
+    min-height: 0;
     box-sizing: border-box;
   }
 

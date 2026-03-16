@@ -142,12 +142,16 @@
 
 <style>
   .table-shell {
-    min-height: 100%;
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    width: 100%;
   }
 
-  .table-shell,
   .table-scroll {
-    min-height: 100%;
+    min-width: 0;
+    min-height: 0;
   }
 
   .table-scroll {
@@ -178,6 +182,8 @@
       var(--vscode-editor-background) 72%,
       var(--vscode-inputValidation-errorBackground, #7f1d1d) 28%
     );
+    flex: 1 1 auto;
+    width: 100%;
     overflow: auto;
   }
 
