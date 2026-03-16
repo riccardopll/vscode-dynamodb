@@ -77,4 +77,46 @@ suite("Webview editing helpers", () => {
 
     assert.strictEqual(rowKey, JSON.stringify({ id: "row-1", version: 2 }));
   });
+
+  test("dirty-column detection treats nested objects with the same value as equal", () => {
+    const dirtyColumns = getDirtyColumns(
+      {
+        id: "row-1",
+        version: 1,
+        details: {
+          total: 10,
+          currency: "EUR",
+        },
+      },
+      {
+        id: "row-1",
+        version: 1,
+        details: {
+          total: 10,
+          currency: "EUR",
+        },
+      },
+      metadata,
+    );
+
+    assert.deepStrictEqual(dirtyColumns, []);
+  });
+
+  test("dirty-column detection treats equal binary values as unchanged", () => {
+    const dirtyColumns = getDirtyColumns(
+      {
+        id: "row-1",
+        version: 1,
+        attachment: new Uint8Array([1, 2, 3]),
+      },
+      {
+        id: "row-1",
+        version: 1,
+        attachment: new Uint8Array([1, 2, 3]),
+      },
+      metadata,
+    );
+
+    assert.deepStrictEqual(dirtyColumns, []);
+  });
 });

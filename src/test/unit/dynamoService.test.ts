@@ -165,6 +165,59 @@ suite("DynamoDB service helpers", () => {
     });
   });
 
+  test("rejects replace requests when the partition key changes", () => {
+    assert.throws(
+      () =>
+        buildReplaceItemTransactionInput({
+          tableName: "Orders",
+          metadata: compositeKeyMetadata,
+          originalItem: {
+            tenantId: "tenant-1",
+            orderId: 42,
+            status: "open",
+          },
+          updatedItem: {
+            tenantId: "tenant-2",
+            orderId: 43,
+            status: "closed",
+          },
+        }),
+      /Primary key attribute "tenantId" cannot be edited\./u,
+    );
+  });
+
+  test("treats equal binary sort keys as unchanged", () => {
+    const binaryKeyMetadata: TableMetadata = {
+      tableName: "Orders",
+      partitionKey: {
+        name: "tenantId",
+        type: "S",
+      },
+      sortKey: {
+        name: "blobId",
+        type: "B",
+      },
+      globalSecondaryIndexes: [],
+    };
+
+    const input = buildUpdateItemInput({
+      tableName: "Orders",
+      metadata: binaryKeyMetadata,
+      originalItem: {
+        tenantId: "tenant-1",
+        blobId: new Uint8Array([1, 2, 3]),
+        status: "open",
+      },
+      updatedItem: {
+        tenantId: "tenant-1",
+        blobId: new Uint8Array([1, 2, 3]),
+        status: "closed",
+      },
+    });
+
+    assert.strictEqual(input.UpdateExpression, "SET #attr0 = :value0");
+  });
+
   test("creates a SET-only update for changed non-key attributes", () => {
     const input = buildUpdateItemInput({
       tableName: "Orders",

@@ -8,12 +8,11 @@ export function collectResultColumns(
     Object.keys(row).forEach((key) => keys.add(key));
   }
 
-  const columns = [...keys].sort((left, right) => left.localeCompare(right));
-  if (!primaryKeyName) {
-    return columns;
-  }
+  return [...keys].sort((left, right) => {
+    if (!primaryKeyName) {
+      return left.localeCompare(right);
+    }
 
-  return columns.sort((left, right) => {
     if (left === primaryKeyName) {
       return -1;
     }

@@ -100,58 +100,8 @@ export class TableExplorerPanel implements vscode.Disposable {
           JSON.stringify(message.item, null, 2),
         );
         return;
-      case "saveItem":
-        await this.withLoading(async () => {
-          const item = await this.service.updateItem(this.connection, {
-            tableName: this.metadata.tableName,
-            metadata: this.metadata,
-            originalItem: message.originalItem,
-            updatedItem: message.updatedItem,
-          });
-
-          this.postMessage({
-            type: "itemSaved",
-            item,
-          });
-        });
-        return;
       case "saveItems":
-        await this.withLoading(async () => {
-          const savedItems: {
-            originalItem: Record<string, unknown>;
-            item: Record<string, unknown>;
-          }[] = [];
-
-          for (const entry of message.items) {
-            try {
-              const item = await this.service.updateItem(this.connection, {
-                tableName: this.metadata.tableName,
-                metadata: this.metadata,
-                originalItem: entry.originalItem,
-                updatedItem: entry.updatedItem,
-              });
-
-              savedItems.push({
-                originalItem: entry.originalItem,
-                item,
-              });
-            } catch (error) {
-              if (savedItems.length > 0) {
-                this.postMessage({
-                  type: "itemsSaved",
-                  items: savedItems,
-                });
-              }
-
-              throw error;
-            }
-          }
-
-          this.postMessage({
-            type: "itemsSaved",
-            items: savedItems,
-          });
-        });
+        await this.withLoading(async () => this.saveItems(message.items));
         return;
       case "runScan":
         await this.withLoading(async () => {
@@ -227,6 +177,48 @@ export class TableExplorerPanel implements vscode.Disposable {
 
   private postMessage(message: ExtensionToWebviewMessage): void {
     void this.panel.webview.postMessage(message);
+  }
+
+  private async saveItems(
+    entries: {
+      originalItem: Record<string, unknown>;
+      updatedItem: Record<string, unknown>;
+    }[],
+  ): Promise<void> {
+    const savedItems: {
+      originalItem: Record<string, unknown>;
+      item: Record<string, unknown>;
+    }[] = [];
+
+    for (const entry of entries) {
+      try {
+        const item = await this.service.updateItem(this.connection, {
+          tableName: this.metadata.tableName,
+          metadata: this.metadata,
+          originalItem: entry.originalItem,
+          updatedItem: entry.updatedItem,
+        });
+
+        savedItems.push({
+          originalItem: entry.originalItem,
+          item,
+        });
+      } catch (error) {
+        if (savedItems.length > 0) {
+          this.postMessage({
+            type: "itemsSaved",
+            items: savedItems,
+          });
+        }
+
+        throw error;
+      }
+    }
+
+    this.postMessage({
+      type: "itemsSaved",
+      items: savedItems,
+    });
   }
 
   private static getPanelKey(

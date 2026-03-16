@@ -143,11 +143,6 @@
           pendingPageIndex = undefined;
           clearEditingState();
           return;
-        case "itemSaved":
-          applySavedItem(message.item, getRowKey(message.item, bootstrap.metadata));
-          requestError = "";
-          showSavedMessage();
-          return;
         case "itemsSaved":
           for (const entry of message.items) {
             applySavedItem(

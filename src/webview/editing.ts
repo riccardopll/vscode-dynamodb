@@ -1,4 +1,6 @@
 import type { TableMetadata } from "../types";
+import { buildStableRowKey } from "../itemKeys";
+import { areValuesEqual } from "../valueEquality";
 
 interface ParseEditedValueSuccess {
   ok: true;
@@ -18,22 +20,13 @@ export function getRowKey(
   item: Record<string, unknown>,
   metadata: TableMetadata,
 ): string {
-  const keyValue: Record<string, unknown> = {
-    [metadata.partitionKey.name]: toStableJsonValue(
-      item[metadata.partitionKey.name],
-    ),
-  };
-
-  if (metadata.sortKey) {
-    keyValue[metadata.sortKey.name] = toStableJsonValue(
-      item[metadata.sortKey.name],
-    );
-  }
-
-  return JSON.stringify(keyValue);
+  return buildStableRowKey(metadata, item);
 }
 
-export function isKeyColumn(column: string, metadata: TableMetadata): boolean {
+export function isPartitionKeyColumn(
+  column: string,
+  metadata: TableMetadata,
+): boolean {
   return column === metadata.partitionKey.name;
 }
 
@@ -141,7 +134,7 @@ export function getDirtyColumns(
   metadata: TableMetadata,
 ): string[] {
   return Object.keys(originalItem).filter((column) => {
-    if (isKeyColumn(column, metadata)) {
+    if (isPartitionKeyColumn(column, metadata)) {
       return false;
     }
 
@@ -173,60 +166,4 @@ function tryParseJson(draftText: string): ParseEditedValueResult {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function toStableJsonValue(value: unknown): unknown {
-  if (value instanceof Uint8Array) {
-    return Array.from(value);
-  }
-
-  return value;
-}
-
-function areValuesEqual(left: unknown, right: unknown): boolean {
-  if (left instanceof Uint8Array || right instanceof Uint8Array) {
-    return areBinaryValuesEqual(left, right);
-  }
-
-  if (Array.isArray(left) || Array.isArray(right)) {
-    if (!Array.isArray(left) || !Array.isArray(right)) {
-      return false;
-    }
-
-    if (left.length !== right.length) {
-      return false;
-    }
-
-    return left.every((value, index) => areValuesEqual(value, right[index]));
-  }
-
-  if (isPlainObject(left) || isPlainObject(right)) {
-    if (!isPlainObject(left) || !isPlainObject(right)) {
-      return false;
-    }
-
-    const leftKeys = Object.keys(left);
-    const rightKeys = Object.keys(right);
-    if (leftKeys.length !== rightKeys.length) {
-      return false;
-    }
-
-    return leftKeys.every(
-      (key) => key in right && areValuesEqual(left[key], right[key]),
-    );
-  }
-
-  return Object.is(left, right);
-}
-
-function areBinaryValuesEqual(left: unknown, right: unknown): boolean {
-  if (!(left instanceof Uint8Array) || !(right instanceof Uint8Array)) {
-    return false;
-  }
-
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  return left.every((value, index) => value === right[index]);
 }

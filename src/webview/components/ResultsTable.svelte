@@ -8,7 +8,7 @@
     getCellKey,
     getRowKey,
     hasOwnColumn,
-    isKeyColumn,
+    isPartitionKeyColumn,
     isStructuredValue,
   } from "../editing";
 
@@ -44,7 +44,7 @@
     item: Record<string, unknown>,
     column: string,
   ): boolean {
-    return !isKeyColumn(column, metadata) && hasOwnColumn(item, column);
+    return !isPartitionKeyColumn(column, metadata) && hasOwnColumn(item, column);
   }
 
   function getDraftValue(
@@ -91,7 +91,7 @@
       <thead>
         <tr>
           {#each columns as column (column)}
-            <th class:key-column={isKeyColumn(column, metadata)}>{column}</th>
+            <th class:key-column={isPartitionKeyColumn(column, metadata)}>{column}</th>
           {/each}
         </tr>
       </thead>
@@ -105,7 +105,7 @@
               <td
                 class:dirty-cell={isDirtyCell(rowKey, column)}
                 class:invalid-cell={isInvalidCell(rowKey, column)}
-                class:key-cell={isKeyColumn(column, metadata)}
+                class:key-cell={isPartitionKeyColumn(column, metadata)}
                 title={formatCell(displayValue)}
               >
                 {#if editable}

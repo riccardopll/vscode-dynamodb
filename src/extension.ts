@@ -11,9 +11,11 @@ import { TableExplorerPanel } from "./webview/tableExplorerPanel";
 export async function activate(
   context: vscode.ExtensionContext,
 ): Promise<void> {
+  const settings = getExtensionSettings();
   const service = new DynamoService();
-  const sessionState = new SessionState(context.globalState, () =>
-    getDefaultRegion(),
+  const sessionState = new SessionState(
+    context.globalState,
+    () => settings.defaultRegion,
   );
 
   const connectionTreeProvider = new ConnectionTreeProvider(sessionState);
@@ -150,8 +152,8 @@ export async function activate(
             service,
             connection,
             metadata,
-            getPageSize(),
-            getSaveShortcut(),
+            settings.pageSize,
+            settings.saveShortcut,
           );
         } catch (error) {
           void vscode.window.showErrorMessage(
@@ -198,22 +200,20 @@ function buildRegionQuickPickItems(
     }));
 }
 
-function getDefaultRegion(): string {
-  return vscode.workspace
-    .getConfiguration()
-    .get<string>("dynamodb.defaultRegion", "us-east-1");
-}
+function getExtensionSettings(): {
+  defaultRegion: string;
+  pageSize: number;
+  saveShortcut: string;
+} {
+  const configuration = vscode.workspace.getConfiguration();
+  const configured = configuration.get<number>("dynamodb.pageSize", 50);
 
-function getPageSize(): number {
-  const configured = vscode.workspace
-    .getConfiguration()
-    .get<number>("dynamodb.pageSize", 50);
-
-  return Math.max(1, Math.min(500, configured));
-}
-
-function getSaveShortcut(): string {
-  return vscode.workspace
-    .getConfiguration()
-    .get<string>("dynamodb.saveShortcut", "Mod+S");
+  return {
+    defaultRegion: configuration.get<string>(
+      "dynamodb.defaultRegion",
+      "us-east-1",
+    ),
+    pageSize: Math.max(1, Math.min(500, configured)),
+    saveShortcut: configuration.get<string>("dynamodb.saveShortcut", "Mod+S"),
+  };
 }

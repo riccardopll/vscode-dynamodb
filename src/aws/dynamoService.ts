@@ -11,8 +11,6 @@ import {
   type AttributeValue,
   type DescribeTableCommandOutput,
 } from "@aws-sdk/client-dynamodb";
-import { isDeepStrictEqual } from "node:util";
-
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
 
 import type {
@@ -25,6 +23,8 @@ import type {
   TableMetadata,
   TableSummary,
 } from "../types";
+import { buildPrimaryKeyRecord, getPrimaryKeys } from "../itemKeys";
+import { areValuesEqual } from "../valueEquality";
 import { createDynamoDbClient } from "./dynamoClient";
 
 interface QueryIndexInputArgs {
@@ -121,10 +121,13 @@ export class DynamoService {
     input: UpdateItemInputArgs,
   ): Promise<Record<string, unknown>> {
     const client = createDynamoDbClient(connection);
+    const changedPrimaryKeys = getChangedPrimaryKeys(
+      input.metadata,
+      input.originalItem,
+      input.updatedItem,
+    );
 
-    if (
-      hasSortKeyChanged(input.metadata, input.originalItem, input.updatedItem)
-    ) {
+    if (changedPrimaryKeys.length > 0) {
       await client.send(
         new TransactWriteItemsCommand(buildReplaceItemTransactionInput(input)),
       );
@@ -217,21 +220,7 @@ export function buildItemKey(
   metadata: TableMetadata,
   item: Record<string, unknown>,
 ): Record<string, AttributeValue> {
-  const keyItem: Record<string, unknown> = {};
-
-  keyItem[metadata.partitionKey.name] = requireItemValue(
-    item,
-    metadata.partitionKey.name,
-  );
-
-  if (metadata.sortKey) {
-    keyItem[metadata.sortKey.name] = requireItemValue(
-      item,
-      metadata.sortKey.name,
-    );
-  }
-
-  return marshall(keyItem);
+  return marshall(buildPrimaryKeyRecord(metadata, item));
 }
 
 export function buildUpdateItemInput({
@@ -240,8 +229,16 @@ export function buildUpdateItemInput({
   originalItem,
   updatedItem,
 }: UpdateItemInputArgs): UpdateItemCommandInput {
-  ensurePartitionKeyIsUnchanged(metadata, originalItem, updatedItem);
-  ensureSortKeyIsUnchanged(metadata, originalItem, updatedItem);
+  const changedPrimaryKeys = getChangedPrimaryKeys(
+    metadata,
+    originalItem,
+    updatedItem,
+  );
+  if (changedPrimaryKeys.length > 0) {
+    throw new Error(
+      `Primary key attribute "${changedPrimaryKeys[0].name}" cannot be edited.`,
+    );
+  }
 
   const changedAttributes = Object.keys(originalItem).filter(
     (attributeName) => {
@@ -253,7 +250,7 @@ export function buildUpdateItemInput({
         return false;
       }
 
-      return !isDeepStrictEqual(
+      return !areValuesEqual(
         originalItem[attributeName],
         updatedItem[attributeName],
       );
@@ -294,9 +291,25 @@ export function buildReplaceItemTransactionInput({
   originalItem,
   updatedItem,
 }: UpdateItemInputArgs): TransactWriteItemsCommandInput {
-  ensurePartitionKeyIsUnchanged(metadata, originalItem, updatedItem);
+  const changedPrimaryKeys = getChangedPrimaryKeys(
+    metadata,
+    originalItem,
+    updatedItem,
+  );
+  const changedPartitionKey = changedPrimaryKeys.find(
+    (key) => key.name === metadata.partitionKey.name,
+  );
+  if (changedPartitionKey) {
+    throw new Error(
+      `Primary key attribute "${changedPartitionKey.name}" cannot be edited.`,
+    );
+  }
 
-  if (!hasSortKeyChanged(metadata, originalItem, updatedItem)) {
+  if (
+    !metadata.sortKey ||
+    changedPrimaryKeys.length !== 1 ||
+    changedPrimaryKeys[0].name !== metadata.sortKey.name
+  ) {
     throw new Error("Sort key changes are required to replace an item.");
   }
 
@@ -372,57 +385,19 @@ function isPrimaryKeyAttribute(
   attributeName: string,
   metadata: TableMetadata,
 ): boolean {
-  return (
-    attributeName === metadata.partitionKey.name ||
-    attributeName === metadata.sortKey?.name
-  );
+  return getPrimaryKeys(metadata).some((key) => key.name === attributeName);
 }
 
-function ensurePrimaryKeyIsUnchanged(
-  key: KeyMetadata,
-  originalItem: Record<string, unknown>,
-  updatedItem: Record<string, unknown>,
-): void {
-  const originalValue = requireItemValue(originalItem, key.name);
-  const updatedValue = requireItemValue(updatedItem, key.name);
-
-  if (!areKeyValuesEqual(key.type, originalValue, updatedValue)) {
-    throw new Error(`Primary key attribute "${key.name}" cannot be edited.`);
-  }
-}
-
-function ensurePartitionKeyIsUnchanged(
+function getChangedPrimaryKeys(
   metadata: TableMetadata,
   originalItem: Record<string, unknown>,
   updatedItem: Record<string, unknown>,
-): void {
-  ensurePrimaryKeyIsUnchanged(metadata.partitionKey, originalItem, updatedItem);
-}
-
-function ensureSortKeyIsUnchanged(
-  metadata: TableMetadata,
-  originalItem: Record<string, unknown>,
-  updatedItem: Record<string, unknown>,
-): void {
-  if (!metadata.sortKey) {
-    return;
-  }
-
-  ensurePrimaryKeyIsUnchanged(metadata.sortKey, originalItem, updatedItem);
-}
-
-function hasSortKeyChanged(
-  metadata: TableMetadata,
-  originalItem: Record<string, unknown>,
-  updatedItem: Record<string, unknown>,
-): boolean {
-  if (!metadata.sortKey) {
-    return false;
-  }
-
-  const originalValue = requireItemValue(originalItem, metadata.sortKey.name);
-  const updatedValue = requireItemValue(updatedItem, metadata.sortKey.name);
-  return !areKeyValuesEqual(metadata.sortKey.type, originalValue, updatedValue);
+): KeyMetadata[] {
+  return getPrimaryKeys(metadata).filter((key) => {
+    const originalValue = requireItemValue(originalItem, key.name);
+    const updatedValue = requireItemValue(updatedItem, key.name);
+    return !areKeyValuesEqual(key.type, originalValue, updatedValue);
+  });
 }
 
 function requireItemValue(
