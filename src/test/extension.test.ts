@@ -8,14 +8,12 @@ suite("Extension Test Suite", () => {
     // The default Mocha timeout is too tight for VS Code integration tests.
     this.timeout(10_000);
 
-    try {
-      await vscode.commands.executeCommand(
-        "dynamodb.openTableExplorer",
-        "TestTable",
-      );
-    } catch {
-      // The command may fail before opening a table, but activation still happens.
-    }
+    const extension = vscode.extensions.getExtension(
+      "riccardopll.vscode-dynamodb-explorer",
+    );
+    assert.ok(extension, "Extension should be available in the test host");
+
+    await extension.activate();
 
     const commands = await vscode.commands.getCommands(true);
     assert.ok(commands.includes("dynamodb.selectProfile"));
