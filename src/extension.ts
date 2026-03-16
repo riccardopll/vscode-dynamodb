@@ -151,6 +151,7 @@ export async function activate(
             connection,
             metadata,
             getPageSize(),
+            getSaveShortcut(),
           );
         } catch (error) {
           void vscode.window.showErrorMessage(
@@ -209,4 +210,10 @@ function getPageSize(): number {
     .get<number>("dynamodb.pageSize", 50);
 
   return Math.max(1, Math.min(500, configured));
+}
+
+function getSaveShortcut(): string {
+  return vscode.workspace
+    .getConfiguration()
+    .get<string>("dynamodb.saveShortcut", "Mod+S");
 }

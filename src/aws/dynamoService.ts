@@ -1,13 +1,19 @@
 import {
   DescribeTableCommand,
   ListTablesCommand,
+  TransactWriteItemsCommand,
+  type TransactWriteItemsCommandInput,
   QueryCommand,
   type QueryCommandInput,
   ScanCommand,
+  UpdateItemCommand,
+  type UpdateItemCommandInput,
   type AttributeValue,
   type DescribeTableCommandOutput,
 } from "@aws-sdk/client-dynamodb";
-import { unmarshall } from "@aws-sdk/util-dynamodb";
+import { isDeepStrictEqual } from "node:util";
+
+import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
 
 import type {
   ConnectionSelection,
@@ -28,6 +34,13 @@ interface QueryIndexInputArgs {
   sortKeyValue?: string;
   pageSize: number;
   cursor?: DynamoCursor;
+}
+
+interface UpdateItemInputArgs {
+  tableName: string;
+  metadata: TableMetadata;
+  originalItem: Record<string, unknown>;
+  updatedItem: Record<string, unknown>;
 }
 
 export class DynamoService {
@@ -102,6 +115,31 @@ export class DynamoService {
       lastEvaluatedKey: response.LastEvaluatedKey,
     };
   }
+
+  public async updateItem(
+    connection: ConnectionSelection,
+    input: UpdateItemInputArgs,
+  ): Promise<Record<string, unknown>> {
+    const client = createDynamoDbClient(connection);
+
+    if (
+      hasSortKeyChanged(input.metadata, input.originalItem, input.updatedItem)
+    ) {
+      await client.send(
+        new TransactWriteItemsCommand(buildReplaceItemTransactionInput(input)),
+      );
+
+      return input.updatedItem;
+    }
+
+    const response = await client.send(
+      new UpdateItemCommand(buildUpdateItemInput(input)),
+    );
+
+    return response.Attributes
+      ? (unmarshall(response.Attributes) as Record<string, unknown>)
+      : input.updatedItem;
+  }
 }
 
 export function buildIndexQueryInput({
@@ -175,6 +213,111 @@ export function getErrorMessage(error: unknown): string {
   return "Unexpected DynamoDB error.";
 }
 
+export function buildItemKey(
+  metadata: TableMetadata,
+  item: Record<string, unknown>,
+): Record<string, AttributeValue> {
+  const keyItem: Record<string, unknown> = {};
+
+  keyItem[metadata.partitionKey.name] = requireItemValue(
+    item,
+    metadata.partitionKey.name,
+  );
+
+  if (metadata.sortKey) {
+    keyItem[metadata.sortKey.name] = requireItemValue(
+      item,
+      metadata.sortKey.name,
+    );
+  }
+
+  return marshall(keyItem);
+}
+
+export function buildUpdateItemInput({
+  tableName,
+  metadata,
+  originalItem,
+  updatedItem,
+}: UpdateItemInputArgs): UpdateItemCommandInput {
+  ensurePartitionKeyIsUnchanged(metadata, originalItem, updatedItem);
+  ensureSortKeyIsUnchanged(metadata, originalItem, updatedItem);
+
+  const changedAttributes = Object.keys(originalItem).filter(
+    (attributeName) => {
+      if (isPrimaryKeyAttribute(attributeName, metadata)) {
+        return false;
+      }
+
+      if (!(attributeName in updatedItem)) {
+        return false;
+      }
+
+      return !isDeepStrictEqual(
+        originalItem[attributeName],
+        updatedItem[attributeName],
+      );
+    },
+  );
+
+  if (changedAttributes.length === 0) {
+    throw new Error("No editable changes to save.");
+  }
+
+  const expressionAttributeNames: Record<string, string> = {};
+  const expressionAttributeValues: Record<string, AttributeValue> = {};
+  const setExpressions = changedAttributes.map((attributeName, index) => {
+    const nameKey = `#attr${index}`;
+    const valueKey = `:value${index}`;
+
+    expressionAttributeNames[nameKey] = attributeName;
+    expressionAttributeValues[valueKey] = toDocumentAttributeValue(
+      updatedItem[attributeName],
+    );
+
+    return `${nameKey} = ${valueKey}`;
+  });
+
+  return {
+    TableName: tableName,
+    Key: buildItemKey(metadata, originalItem),
+    UpdateExpression: `SET ${setExpressions.join(", ")}`,
+    ExpressionAttributeNames: expressionAttributeNames,
+    ExpressionAttributeValues: expressionAttributeValues,
+    ReturnValues: "ALL_NEW",
+  };
+}
+
+export function buildReplaceItemTransactionInput({
+  tableName,
+  metadata,
+  originalItem,
+  updatedItem,
+}: UpdateItemInputArgs): TransactWriteItemsCommandInput {
+  ensurePartitionKeyIsUnchanged(metadata, originalItem, updatedItem);
+
+  if (!hasSortKeyChanged(metadata, originalItem, updatedItem)) {
+    throw new Error("Sort key changes are required to replace an item.");
+  }
+
+  return {
+    TransactItems: [
+      {
+        Put: {
+          TableName: tableName,
+          Item: marshall(updatedItem),
+        },
+      },
+      {
+        Delete: {
+          TableName: tableName,
+          Key: buildItemKey(metadata, originalItem),
+        },
+      },
+    ],
+  };
+}
+
 function mapTableMetadata(response: DescribeTableCommandOutput): TableMetadata {
   const table = response.Table;
   if (!table?.TableName || !table.KeySchema || !table.AttributeDefinitions) {
@@ -219,6 +362,102 @@ function mapTableMetadata(response: DescribeTableCommandOutput): TableMetadata {
       },
     ),
   };
+}
+
+function toDocumentAttributeValue(value: unknown): AttributeValue {
+  return marshall({ value }).value as AttributeValue;
+}
+
+function isPrimaryKeyAttribute(
+  attributeName: string,
+  metadata: TableMetadata,
+): boolean {
+  return (
+    attributeName === metadata.partitionKey.name ||
+    attributeName === metadata.sortKey?.name
+  );
+}
+
+function ensurePrimaryKeyIsUnchanged(
+  key: KeyMetadata,
+  originalItem: Record<string, unknown>,
+  updatedItem: Record<string, unknown>,
+): void {
+  const originalValue = requireItemValue(originalItem, key.name);
+  const updatedValue = requireItemValue(updatedItem, key.name);
+
+  if (!areKeyValuesEqual(key.type, originalValue, updatedValue)) {
+    throw new Error(`Primary key attribute "${key.name}" cannot be edited.`);
+  }
+}
+
+function ensurePartitionKeyIsUnchanged(
+  metadata: TableMetadata,
+  originalItem: Record<string, unknown>,
+  updatedItem: Record<string, unknown>,
+): void {
+  ensurePrimaryKeyIsUnchanged(metadata.partitionKey, originalItem, updatedItem);
+}
+
+function ensureSortKeyIsUnchanged(
+  metadata: TableMetadata,
+  originalItem: Record<string, unknown>,
+  updatedItem: Record<string, unknown>,
+): void {
+  if (!metadata.sortKey) {
+    return;
+  }
+
+  ensurePrimaryKeyIsUnchanged(metadata.sortKey, originalItem, updatedItem);
+}
+
+function hasSortKeyChanged(
+  metadata: TableMetadata,
+  originalItem: Record<string, unknown>,
+  updatedItem: Record<string, unknown>,
+): boolean {
+  if (!metadata.sortKey) {
+    return false;
+  }
+
+  const originalValue = requireItemValue(originalItem, metadata.sortKey.name);
+  const updatedValue = requireItemValue(updatedItem, metadata.sortKey.name);
+  return !areKeyValuesEqual(metadata.sortKey.type, originalValue, updatedValue);
+}
+
+function requireItemValue(
+  item: Record<string, unknown>,
+  attributeName: string,
+): unknown {
+  if (!(attributeName in item)) {
+    throw new Error(`Missing required item attribute "${attributeName}".`);
+  }
+
+  return item[attributeName];
+}
+
+function areKeyValuesEqual(
+  keyType: ScalarKeyType,
+  left: unknown,
+  right: unknown,
+): boolean {
+  if (keyType === "B") {
+    return areBinaryValuesEqual(left, right);
+  }
+
+  return Object.is(left, right);
+}
+
+function areBinaryValuesEqual(left: unknown, right: unknown): boolean {
+  if (!(left instanceof Uint8Array) || !(right instanceof Uint8Array)) {
+    return false;
+  }
+
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((value, index) => value === right[index]);
 }
 
 function readKeyMetadata(

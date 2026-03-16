@@ -23,6 +23,7 @@ export class TableExplorerPanel implements vscode.Disposable {
     connection: ConnectionSelection,
     metadata: TableMetadata,
     pageSize: number,
+    saveShortcut: string,
   ): void {
     const key = TableExplorerPanel.getPanelKey(connection, metadata.tableName);
     const existingPanel = TableExplorerPanel.panels.get(key);
@@ -50,6 +51,7 @@ export class TableExplorerPanel implements vscode.Disposable {
       connection,
       metadata,
       pageSize,
+      saveShortcut,
     );
 
     TableExplorerPanel.panels.set(key, explorerPanel);
@@ -63,11 +65,13 @@ export class TableExplorerPanel implements vscode.Disposable {
     private readonly connection: ConnectionSelection,
     private readonly metadata: TableMetadata,
     private readonly pageSize: number,
+    private readonly saveShortcut: string,
   ) {
     const bootstrap: ExplorerBootstrap = {
       profile: connection.profile,
       region: connection.region,
       pageSize,
+      saveShortcut,
       metadata,
     };
 
@@ -95,6 +99,59 @@ export class TableExplorerPanel implements vscode.Disposable {
         await vscode.env.clipboard.writeText(
           JSON.stringify(message.item, null, 2),
         );
+        return;
+      case "saveItem":
+        await this.withLoading(async () => {
+          const item = await this.service.updateItem(this.connection, {
+            tableName: this.metadata.tableName,
+            metadata: this.metadata,
+            originalItem: message.originalItem,
+            updatedItem: message.updatedItem,
+          });
+
+          this.postMessage({
+            type: "itemSaved",
+            item,
+          });
+        });
+        return;
+      case "saveItems":
+        await this.withLoading(async () => {
+          const savedItems: {
+            originalItem: Record<string, unknown>;
+            item: Record<string, unknown>;
+          }[] = [];
+
+          for (const entry of message.items) {
+            try {
+              const item = await this.service.updateItem(this.connection, {
+                tableName: this.metadata.tableName,
+                metadata: this.metadata,
+                originalItem: entry.originalItem,
+                updatedItem: entry.updatedItem,
+              });
+
+              savedItems.push({
+                originalItem: entry.originalItem,
+                item,
+              });
+            } catch (error) {
+              if (savedItems.length > 0) {
+                this.postMessage({
+                  type: "itemsSaved",
+                  items: savedItems,
+                });
+              }
+
+              throw error;
+            }
+          }
+
+          this.postMessage({
+            type: "itemsSaved",
+            items: savedItems,
+          });
+        });
         return;
       case "runScan":
         await this.withLoading(async () => {

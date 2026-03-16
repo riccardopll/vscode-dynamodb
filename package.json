@@ -46,6 +46,11 @@
           "minimum": 1,
           "maximum": 500,
           "description": "Maximum number of DynamoDB items to load per request."
+        },
+        "dynamodb.saveShortcut": {
+          "type": "string",
+          "default": "Mod+S",
+          "description": "Keyboard shortcut for saving staged table edits in the explorer."
         }
       }
     },

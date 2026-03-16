@@ -4,6 +4,7 @@ export interface ExplorerBootstrap {
   profile: string;
   region: string;
   pageSize: number;
+  saveShortcut: string;
   metadata: TableMetadata;
 }
 
@@ -22,6 +23,18 @@ export type WebviewToExtensionMessage =
   | {
       type: "copyItem";
       item: Record<string, unknown>;
+    }
+  | {
+      type: "saveItem";
+      originalItem: Record<string, unknown>;
+      updatedItem: Record<string, unknown>;
+    }
+  | {
+      type: "saveItems";
+      items: {
+        originalItem: Record<string, unknown>;
+        updatedItem: Record<string, unknown>;
+      }[];
     };
 
 export type ExtensionToWebviewMessage =
@@ -39,4 +52,15 @@ export type ExtensionToWebviewMessage =
   | {
       type: "error";
       message: string;
+    }
+  | {
+      type: "itemSaved";
+      item: Record<string, unknown>;
+    }
+  | {
+      type: "itemsSaved";
+      items: {
+        originalItem: Record<string, unknown>;
+        item: Record<string, unknown>;
+      }[];
     };

@@ -1,5 +1,6 @@
 export function collectResultColumns(
   rows: Record<string, unknown>[],
+  primaryKeyName?: string,
 ): string[] {
   const keys = new Set<string>();
 
@@ -7,5 +8,20 @@ export function collectResultColumns(
     Object.keys(row).forEach((key) => keys.add(key));
   }
 
-  return [...keys].sort((left, right) => left.localeCompare(right));
+  const columns = [...keys].sort((left, right) => left.localeCompare(right));
+  if (!primaryKeyName) {
+    return columns;
+  }
+
+  return columns.sort((left, right) => {
+    if (left === primaryKeyName) {
+      return -1;
+    }
+
+    if (right === primaryKeyName) {
+      return 1;
+    }
+
+    return left.localeCompare(right);
+  });
 }

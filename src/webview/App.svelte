@@ -2,13 +2,21 @@
   import { onMount } from "svelte";
 
   import type { DynamoCursor, ExplorerMode, IndexMetadata } from "../types";
-  import { collectResultColumns } from "./results";
+  import ResultsTable from "./components/ResultsTable.svelte";
+  import {
+    formatEditableValue,
+    getCellKey,
+    getDirtyColumns,
+    getRowKey,
+    parseEditedValue,
+  } from "./editing";
   import type {
     ExplorerBootstrap,
     ExtensionToWebviewMessage,
     WebviewToExtensionMessage,
   } from "./protocol";
-  import ResultsTable from "./components/ResultsTable.svelte";
+  import { collectResultColumns } from "./results";
+  import { matchesShortcut } from "./shortcuts";
 
   interface ResultPage {
     items: Record<string, unknown>[];
@@ -26,7 +34,14 @@
     sortKeyValue?: string;
   }
 
+  interface UpdateCellDraftDetail {
+    item: Record<string, unknown>;
+    column: string;
+    value: string;
+  }
+
   type QueryRequest = QueryRequestScan | QueryRequestIndex;
+  type BusyAction = "query" | "save" | undefined;
 
   interface VsCodeApi {
     postMessage(message: WebviewToExtensionMessage): void;
@@ -42,9 +57,17 @@
   let pages: ResultPage[] = [];
   let currentPageIndex = 0;
   let loading = false;
-  let error = "";
+  let busyAction: BusyAction;
+  let requestError = "";
   let lastQuery: QueryRequest | undefined;
   let pendingPageIndex: number | undefined;
+  let originalRowsByKey: Record<string, Record<string, unknown>> = {};
+  let editedRowsByKey: Record<string, Record<string, unknown>> = {};
+  let dirtyColumnsByRowKey: Record<string, string[]> = {};
+  let cellDrafts: Record<string, string> = {};
+  let invalidCells: Record<string, string> = {};
+  let savedMessageVisible = false;
+  let savedMessageTimer: ReturnType<typeof setTimeout> | undefined;
 
   $: queryIndexes = bootstrap.metadata.globalSecondaryIndexes;
   $: selectedIndex = queryIndexes.find(
@@ -52,7 +75,10 @@
   );
   $: currentPage = pages[currentPageIndex];
   $: items = currentPage?.items ?? [];
-  $: columns = collectResultColumns(items);
+  $: columns = collectResultColumns(
+    items,
+    bootstrap.metadata.partitionKey.name,
+  );
   $: hasResults = items.length > 0;
   $: canRunQuery = Boolean(selectedIndex) && !loading;
   $: canGoPrevious = !loading && currentPageIndex > 0;
@@ -62,6 +88,19 @@
       (currentPageIndex < pages.length - 1) || currentPage?.nextCursor,
     );
   $: currentPageNumber = currentPageIndex + 1;
+  $: dirtyRowKeys = Object.keys(dirtyColumnsByRowKey);
+  $: invalidCellKeys = Object.keys(invalidCells);
+  $: dirtyCellCount = dirtyRowKeys.reduce(
+    (count, rowKey) => count + dirtyColumnsByRowKey[rowKey].length,
+    0,
+  );
+  $: hasPendingEdits = dirtyRowKeys.length > 0 || invalidCellKeys.length > 0;
+  $: canSave =
+    !loading && dirtyRowKeys.length > 0 && invalidCellKeys.length === 0;
+  $: busyLabel =
+    busyAction === "save" && loading ? "Saving..." : loading ? "Running..." : "";
+  $: validationError = invalidCellKeys.length > 0 ? invalidCells[invalidCellKeys[0]] : "";
+  $: error = validationError || requestError;
 
   onMount(() => {
     const handleMessage = (
@@ -72,10 +111,13 @@
       switch (message.type) {
         case "setLoading":
           loading = message.loading;
+          if (!message.loading) {
+            busyAction = undefined;
+          }
           return;
         case "error":
           pendingPageIndex = undefined;
-          error = message.message;
+          requestError = message.message;
           return;
         case "results":
           if (message.append) {
@@ -99,16 +141,54 @@
           }
 
           pendingPageIndex = undefined;
+          clearEditingState();
+          return;
+        case "itemSaved":
+          applySavedItem(message.item, getRowKey(message.item, bootstrap.metadata));
+          requestError = "";
+          showSavedMessage();
+          return;
+        case "itemsSaved":
+          for (const entry of message.items) {
+            applySavedItem(
+              entry.item,
+              getRowKey(entry.originalItem, bootstrap.metadata),
+            );
+          }
+          requestError = "";
+          if (message.items.length > 0) {
+            showSavedMessage();
+          }
+      }
+    };
+
+    const handleKeydown = (event: KeyboardEvent): void => {
+      if (!matchesShortcut(event, bootstrap.saveShortcut)) {
+        return;
+      }
+
+      event.preventDefault();
+      if (canSave) {
+        saveChanges();
       }
     };
 
     window.addEventListener("message", handleMessage);
+    window.addEventListener("keydown", handleKeydown);
 
-    return () => window.removeEventListener("message", handleMessage);
+    return () => {
+      window.removeEventListener("message", handleMessage);
+      window.removeEventListener("keydown", handleKeydown);
+      clearSavedMessageTimer();
+    };
   });
 
   function switchMode(nextMode: ExplorerMode): void {
     if (nextMode === "query-index" && queryIndexes.length === 0) {
+      return;
+    }
+
+    if (!confirmDiscardPendingEdits()) {
       return;
     }
 
@@ -117,6 +197,14 @@
   }
 
   function selectIndex(nextIndexName: string): void {
+    if (nextIndexName === selectedIndexName) {
+      return;
+    }
+
+    if (!confirmDiscardPendingEdits()) {
+      return;
+    }
+
     selectedIndexName = nextIndexName;
     partitionKeyValue = "";
     sortKeyValue = "";
@@ -124,11 +212,27 @@
   }
 
   function updatePartitionKey(value: string): void {
+    if (value === partitionKeyValue) {
+      return;
+    }
+
+    if (!confirmDiscardPendingEdits()) {
+      return;
+    }
+
     partitionKeyValue = value;
     resetResults();
   }
 
   function updateSortKey(value: string): void {
+    if (value === sortKeyValue) {
+      return;
+    }
+
+    if (!confirmDiscardPendingEdits()) {
+      return;
+    }
+
     sortKeyValue = value;
     resetResults();
   }
@@ -136,17 +240,18 @@
   function runScan(): void {
     resetResults();
     lastQuery = { type: "runScan" };
+    busyAction = "query";
     postMessage({ type: "runScan" });
   }
 
   function runQuery(): void {
     if (!selectedIndex) {
-      error = "Select an index before running a query.";
+      requestError = "Select an index before running a query.";
       return;
     }
 
     if (!partitionKeyValue.trim()) {
-      error = `${selectedIndex.partitionKey.name} is required.`;
+      requestError = `${selectedIndex.partitionKey.name} is required.`;
       return;
     }
 
@@ -160,10 +265,15 @@
     };
 
     lastQuery = nextQuery;
+    busyAction = "query";
     postMessage(nextQuery);
   }
 
   function runActiveRequest(): void {
+    if (!confirmDiscardPendingEdits()) {
+      return;
+    }
+
     if (mode === "scan") {
       runScan();
       return;
@@ -174,6 +284,10 @@
 
   function loadMore(): void {
     if (!lastQuery) {
+      return;
+    }
+
+    if (!confirmDiscardPendingEdits()) {
       return;
     }
 
@@ -188,6 +302,7 @@
     }
 
     pendingPageIndex = currentPageIndex + 1;
+    busyAction = "query";
 
     if (lastQuery.type === "runScan") {
       postMessage({
@@ -211,14 +326,151 @@
       return;
     }
 
+    if (!confirmDiscardPendingEdits()) {
+      return;
+    }
+
     currentPageIndex -= 1;
+  }
+
+  function handleUpdateCellDraft(
+    event: CustomEvent<UpdateCellDraftDetail>,
+  ): void {
+    const { item, column, value } = event.detail;
+    const rowKey = getRowKey(item, bootstrap.metadata);
+    const cellKey = getCellKey(rowKey, column);
+    const originalRow = originalRowsByKey[rowKey] ?? structuredClone(item);
+    const originalValue = originalRow[column];
+
+    originalRowsByKey = {
+      ...originalRowsByKey,
+      [rowKey]: originalRow,
+    };
+    cellDrafts = {
+      ...cellDrafts,
+      [cellKey]: value,
+    };
+    requestError = "";
+    clearSavedMessage();
+
+    const result = parseEditedValue(originalValue, value);
+    if (!result.ok) {
+      invalidCells = {
+        ...invalidCells,
+        [cellKey]: result.message,
+      };
+      return;
+    }
+
+    invalidCells = omitKey(invalidCells, cellKey);
+
+    const nextEditedRow = structuredClone(editedRowsByKey[rowKey] ?? originalRow);
+    nextEditedRow[column] = result.value;
+
+    const nextDirtyColumns = getDirtyColumns(
+      originalRow,
+      nextEditedRow,
+      bootstrap.metadata,
+    );
+
+    if (nextDirtyColumns.length === 0) {
+      editedRowsByKey = omitKey(editedRowsByKey, rowKey);
+      dirtyColumnsByRowKey = omitKey(dirtyColumnsByRowKey, rowKey);
+      cellDrafts = omitKey(cellDrafts, cellKey);
+      return;
+    }
+
+    editedRowsByKey = {
+      ...editedRowsByKey,
+      [rowKey]: nextEditedRow,
+    };
+    dirtyColumnsByRowKey = {
+      ...dirtyColumnsByRowKey,
+      [rowKey]: nextDirtyColumns,
+    };
+
+    if (value === formatEditableValue(result.value)) {
+      cellDrafts = omitKey(cellDrafts, cellKey);
+    }
+  }
+
+  function saveChanges(): void {
+    if (!canSave) {
+      return;
+    }
+
+    requestError = "";
+    busyAction = "save";
+    clearSavedMessage();
+    postMessage({
+      type: "saveItems",
+      items: dirtyRowKeys.map((rowKey) => ({
+        originalItem: originalRowsByKey[rowKey],
+        updatedItem: editedRowsByKey[rowKey],
+      })),
+    });
+  }
+
+  function confirmDiscardPendingEdits(): boolean {
+    if (!hasPendingEdits) {
+      return true;
+    }
+
+    const shouldDiscard = window.confirm("Discard unsaved changes?");
+    if (!shouldDiscard) {
+      return false;
+    }
+
+    clearEditingState();
+    requestError = "";
+    return true;
+  }
+
+  function applySavedItem(
+    item: Record<string, unknown>,
+    previousRowKey: string,
+  ): void {
+    const nextPageItems = items.map((candidate) =>
+      getRowKey(candidate, bootstrap.metadata) === previousRowKey
+        ? item
+        : candidate,
+    );
+
+    pages = pages.map((page, index) =>
+      index === currentPageIndex
+        ? {
+            ...page,
+            items: nextPageItems,
+          }
+        : page,
+    );
+
+    clearRowEditingState(previousRowKey);
+  }
+
+  function clearRowEditingState(rowKey: string): void {
+    originalRowsByKey = omitKey(originalRowsByKey, rowKey);
+    editedRowsByKey = omitKey(editedRowsByKey, rowKey);
+    dirtyColumnsByRowKey = omitKey(dirtyColumnsByRowKey, rowKey);
+    cellDrafts = omitPrefixedKeys(cellDrafts, `${rowKey}:`);
+    invalidCells = omitPrefixedKeys(invalidCells, `${rowKey}:`);
+  }
+
+  function clearEditingState(): void {
+    originalRowsByKey = {};
+    editedRowsByKey = {};
+    dirtyColumnsByRowKey = {};
+    cellDrafts = {};
+    invalidCells = {};
+    clearSavedMessage();
   }
 
   function resetResults(): void {
     pages = [];
     currentPageIndex = 0;
     pendingPageIndex = undefined;
-    error = "";
+    clearEditingState();
+    requestError = "";
   }
 
   function postMessage(message: WebviewToExtensionMessage): void {
@@ -241,6 +493,46 @@
     }
 
     return "Run a scan or query to load rows.";
+  }
+
+  function omitKey<T extends Record<string, unknown>>(
+    record: T,
+    key: string,
+  ): T {
+    const { [key]: _removed, ...rest } = record;
+    return rest as T;
+  }
+
+  function omitPrefixedKeys<T extends Record<string, unknown>>(
+    record: T,
+    prefix: string,
+  ): T {
+    return Object.fromEntries(
+      Object.entries(record).filter(([key]) => !key.startsWith(prefix)),
+    ) as T;
+  }
+
+  function showSavedMessage(): void {
+    clearSavedMessageTimer();
+    savedMessageVisible = true;
+    savedMessageTimer = setTimeout(() => {
+      savedMessageVisible = false;
+      savedMessageTimer = undefined;
+    }, 2000);
+  }
+
+  function clearSavedMessage(): void {
+    clearSavedMessageTimer();
+    savedMessageVisible = false;
+  }
+
+  function clearSavedMessageTimer(): void {
+    if (!savedMessageTimer) {
+      return;
+    }
+
+    clearTimeout(savedMessageTimer);
+    savedMessageTimer = undefined;
   }
 </script>
 
@@ -306,7 +598,7 @@
         <button
           aria-label={mode === "scan" ? "Run Scan" : "Run Query"}
           class="run-button"
-          disabled={mode === "query-index" && !canRunQuery}
+          disabled={loading || (mode === "query-index" && !canRunQuery)}
           on:click={runActiveRequest}
           type="button"
         >
@@ -321,8 +613,22 @@
       {#if mode === "query-index" && selectedIndex}
         <span>{formatIndex(selectedIndex)}</span>
       {/if}
-      {#if loading}
-        <span>Running...</span>
+      {#if busyLabel}
+        <span>{busyLabel}</span>
+      {/if}
+      {#if !loading && savedMessageVisible}
+        <span>Saved!</span>
+      {/if}
+      {#if dirtyCellCount > 0}
+        <span>{dirtyCellCount} field{dirtyCellCount === 1 ? "" : "s"} staged</span>
+        <button
+          class="save-link"
+          disabled={!canSave}
+          on:click={saveChanges}
+          type="button"
+        >
+          Save changes?
+        </button>
       {/if}
       {#if pages.length > 0}
         <div aria-label="Pagination" class="pager" role="group">
@@ -356,7 +662,18 @@
 
   <section class="results-panel">
     {#if hasResults}
-      <ResultsTable {columns} {items} />
+      <ResultsTable
+        {columns}
+        {items}
+        metadata={bootstrap.metadata}
+        busy={loading}
+        dirtyRows={dirtyRowKeys}
+        {dirtyColumnsByRowKey}
+        {editedRowsByKey}
+        {cellDrafts}
+        {invalidCellKeys}
+        on:updateCellDraft={handleUpdateCellDraft}
+      />
     {:else}
       <div class="empty-state">
         <p>{getEmptyMessage()}</p>
@@ -388,16 +705,6 @@
 
   .shell {
     --bg: var(--vscode-editor-background);
-    --surface: color-mix(
-      in srgb,
-      var(--bg) 92%,
-      var(--vscode-editor-foreground) 8%
-    );
-    --surface-2: color-mix(
-      in srgb,
-      var(--bg) 88%,
-      var(--vscode-editor-foreground) 12%
-    );
     --border: var(
       --vscode-panel-border,
       color-mix(in srgb, var(--vscode-editor-foreground) 16%, transparent)
@@ -410,7 +717,7 @@
     --accent: var(--vscode-button-background);
     --accent-foreground: var(--vscode-button-foreground);
     --focus: var(--vscode-focusBorder, var(--accent));
-    --input-bg: var(--vscode-input-background, var(--surface));
+    --input-bg: var(--vscode-input-background, var(--bg));
     --input-border: var(--vscode-input-border, var(--border));
     --input-text: var(--vscode-input-foreground, var(--text));
     --danger: var(--vscode-errorForeground, #c72e2e);
@@ -522,9 +829,27 @@
 
   .meta-row {
     display: flex;
+    align-items: center;
     gap: 12px;
     flex-wrap: wrap;
     padding-top: 10px;
+  }
+
+  .save-link {
+    display: inline-flex;
+    align-items: center;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--vscode-textLink-foreground, var(--text));
+    cursor: pointer;
+    font: inherit;
+    line-height: inherit;
+    text-decoration: underline;
+  }
+
+  .save-link:hover:not(:disabled) {
+    color: var(--vscode-textLink-activeForeground, var(--text));
   }
 
   .error-banner {
