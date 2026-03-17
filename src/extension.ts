@@ -153,7 +153,6 @@ export async function activate(
             connection,
             metadata,
             settings.pageSize,
-            settings.saveShortcut,
           );
         } catch (error) {
           void vscode.window.showErrorMessage(
@@ -162,6 +161,15 @@ export async function activate(
         }
       },
     ),
+    vscode.commands.registerCommand("dynamodb.saveTableChanges", async () => {
+      if (TableExplorerPanel.requestSaveForActivePanel()) {
+        return;
+      }
+
+      void vscode.window.showWarningMessage(
+        "Open a DynamoDB table explorer to save item changes.",
+      );
+    }),
   );
 
   await sessionState.initialize();
@@ -203,7 +211,6 @@ function buildRegionQuickPickItems(
 function getExtensionSettings(): {
   defaultRegion: string;
   pageSize: number;
-  saveShortcut: string;
 } {
   const configuration = vscode.workspace.getConfiguration();
   const configured = configuration.get<number>("dynamodb.pageSize", 50);
@@ -214,6 +221,5 @@ function getExtensionSettings(): {
       "us-east-1",
     ),
     pageSize: Math.max(1, Math.min(500, configured)),
-    saveShortcut: configuration.get<string>("dynamodb.saveShortcut", "Mod+S"),
   };
 }

@@ -4,7 +4,6 @@ export interface ExplorerBootstrap {
   profile: string;
   region: string;
   pageSize: number;
-  saveShortcut: string;
   metadata: TableMetadata;
 }
 
@@ -36,6 +35,9 @@ export type ExtensionToWebviewMessage =
   | {
       type: "setLoading";
       loading: boolean;
+    }
+  | {
+      type: "saveRequested";
     }
   | {
       type: "results";

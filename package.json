@@ -23,6 +23,7 @@
   },
   "license": "MIT",
   "publisher": "riccardopll",
+  "icon": "media/DynamoDB.png",
   "main": "./dist/extension.js",
   "scripts": {
     "build": "tsc --noEmit && svelte-check --fail-on-warnings && node scripts/build-extension.mjs && vite build",
@@ -33,6 +34,21 @@
     "test": "npm run build && tsc -p tsconfig.test.json && npm run lint:ci && vscode-test"
   },
   "contributes": {
+    "commands": [
+      {
+        "command": "dynamodb.saveTableChanges",
+        "title": "Save Table Changes",
+        "category": "DynamoDB"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "dynamodb.saveTableChanges",
+        "mac": "cmd+s",
+        "key": "ctrl+s",
+        "when": "activeWebviewPanelId == dynamodbTableExplorer"
+      }
+    ],
     "configuration": {
       "title": "DynamoDB Explorer",
       "properties": {
@@ -47,11 +63,6 @@
           "minimum": 1,
           "maximum": 500,
           "description": "Maximum number of DynamoDB items to load per request."
-        },
-        "dynamodb.saveShortcut": {
-          "type": "string",
-          "default": "Mod+S",
-          "description": "Keyboard shortcut for saving staged table edits in the explorer."
         }
       }
     },

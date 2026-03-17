@@ -1,12 +1,7 @@
 import * as vscode from "vscode";
 
 import { DynamoService, getErrorMessage } from "../aws/dynamoService";
-import type {
-  ConnectionSelection,
-  DynamoCursor,
-  IndexMetadata,
-  TableMetadata,
-} from "../types";
+import type { ConnectionSelection, TableMetadata } from "../types";
 import { getTableExplorerHtml } from "./html";
 import type {
   ExplorerBootstrap,
@@ -16,6 +11,7 @@ import type {
 
 export class TableExplorerPanel implements vscode.Disposable {
   private static readonly panels = new Map<string, TableExplorerPanel>();
+  private static activePanel: TableExplorerPanel | undefined;
 
   public static createOrReveal(
     extensionUri: vscode.Uri,
@@ -23,12 +19,12 @@ export class TableExplorerPanel implements vscode.Disposable {
     connection: ConnectionSelection,
     metadata: TableMetadata,
     pageSize: number,
-    saveShortcut: string,
   ): void {
     const key = TableExplorerPanel.getPanelKey(connection, metadata.tableName);
     const existingPanel = TableExplorerPanel.panels.get(key);
     if (existingPanel) {
       existingPanel.panel.reveal(vscode.ViewColumn.One);
+      TableExplorerPanel.activePanel = existingPanel;
       return;
     }
 
@@ -51,10 +47,22 @@ export class TableExplorerPanel implements vscode.Disposable {
       connection,
       metadata,
       pageSize,
-      saveShortcut,
     );
 
     TableExplorerPanel.panels.set(key, explorerPanel);
+    TableExplorerPanel.activePanel = explorerPanel;
+  }
+
+  public static requestSaveForActivePanel(): boolean {
+    const activePanel = TableExplorerPanel.activePanel;
+    if (!activePanel || !activePanel.panel.active) {
+      return false;
+    }
+
+    activePanel.postMessage({
+      type: "saveRequested",
+    });
+    return true;
   }
 
   private constructor(
@@ -65,13 +73,11 @@ export class TableExplorerPanel implements vscode.Disposable {
     private readonly connection: ConnectionSelection,
     private readonly metadata: TableMetadata,
     private readonly pageSize: number,
-    private readonly saveShortcut: string,
   ) {
     const bootstrap: ExplorerBootstrap = {
       profile: connection.profile,
       region: connection.region,
       pageSize,
-      saveShortcut,
       metadata,
     };
 
@@ -82,6 +88,11 @@ export class TableExplorerPanel implements vscode.Disposable {
     );
 
     this.panel.onDidDispose(() => this.dispose());
+    this.panel.onDidChangeViewState(({ webviewPanel }) => {
+      if (webviewPanel.active) {
+        TableExplorerPanel.activePanel = this;
+      }
+    });
     this.panel.webview.onDidReceiveMessage(
       (message: WebviewToExtensionMessage) => this.handleMessage(message),
     );
@@ -89,6 +100,9 @@ export class TableExplorerPanel implements vscode.Disposable {
 
   public dispose(): void {
     TableExplorerPanel.panels.delete(this.panelKey);
+    if (TableExplorerPanel.activePanel === this) {
+      TableExplorerPanel.activePanel = undefined;
+    }
   }
 
   private async handleMessage(

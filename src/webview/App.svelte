@@ -16,8 +16,6 @@
     WebviewToExtensionMessage,
   } from "./protocol";
   import { collectResultColumns } from "./results";
-  import { matchesShortcut } from "./shortcuts";
-
   interface ResultPage {
     items: Record<string, unknown>[];
     nextCursor?: DynamoCursor;
@@ -154,26 +152,17 @@
           if (message.items.length > 0) {
             showSavedMessage();
           }
-      }
-    };
-
-    const handleKeydown = (event: KeyboardEvent): void => {
-      if (!matchesShortcut(event, bootstrap.saveShortcut)) {
-        return;
-      }
-
-      event.preventDefault();
-      if (canSave) {
-        saveChanges();
+          return;
+        case "saveRequested":
+          saveChanges();
+          return;
       }
     };
 
     window.addEventListener("message", handleMessage);
-    window.addEventListener("keydown", handleKeydown);
 
     return () => {
       window.removeEventListener("message", handleMessage);
-      window.removeEventListener("keydown", handleKeydown);
       clearSavedMessageTimer();
     };
   });
