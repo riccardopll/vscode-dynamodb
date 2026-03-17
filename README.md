@@ -11,15 +11,15 @@ Install from the [VS Code Marketplace](https://marketplace.visualstudio.com/item
 
 ## Features
 
-- Browse tables directly from the sidebar
-- Support for multiple AWS profiles and regions
+- Browse DynamoDB tables directly from the sidebar
+- Switch between AWS profiles and regions
 - Run table scans and query global secondary indexes
-- Edit item values inline and save them
+- Edit item values inline and save changes
 
 ## Configuration
 
-| Type       | Name                           | Description                                                                                                    | Default                                         |
-| ---------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
-| Setting    | `dynamodb.defaultRegion`       | Fallback AWS region when the selected profile does not define one.                                             | `us-east-1`                                     |
-| Setting    | `dynamodb.pageSize`            | Maximum number of DynamoDB items to load per request.                                                          | `50`                                            |
-| Keybinding | `DynamoDB: Save Table Changes` | Saves item edits while a DynamoDB table explorer is focused. You can remap it from VS Code Keyboard Shortcuts. | `Cmd+S` on macOS, `Ctrl+S` on Windows and Linux |
+| Type       | Name                        | Description                                                        | Default          |
+| ---------- | --------------------------- | ------------------------------------------------------------------ | ---------------- |
+| Setting    | `dynamodb.defaultRegion`    | Fallback AWS region when the selected profile does not define one. | `us-east-1`      |
+| Setting    | `dynamodb.pageSize`         | Maximum number of items to load per request.                       | `50`             |
+| Keybinding | `dynamodb.saveTableChanges` | Saves item edits while a table explorer is focused.                | `Cmd+S`/`Ctrl+S` |
