@@ -36,6 +36,28 @@
   "contributes": {
     "commands": [
       {
+        "command": "dynamodb.searchTables",
+        "title": "Search Tables",
+        "category": "DynamoDB",
+        "icon": "$(search)"
+      },
+      {
+        "command": "dynamodb.clearTableSearch",
+        "title": "Clear Table Search",
+        "category": "DynamoDB",
+        "icon": "$(close)"
+      },
+      {
+        "command": "dynamodb.saveFavoriteTable",
+        "title": "Save to Favorites",
+        "category": "DynamoDB"
+      },
+      {
+        "command": "dynamodb.removeFavoriteTable",
+        "title": "Remove from Favorites",
+        "category": "DynamoDB"
+      },
+      {
         "command": "dynamodb.executeQuery",
         "title": "Execute Query",
         "category": "DynamoDB"
@@ -60,6 +82,58 @@
         "when": "activeWebviewPanelId == dynamodbTableExplorer"
       }
     ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "dynamodb.searchTables",
+          "when": "false"
+        },
+        {
+          "command": "dynamodb.clearTableSearch",
+          "when": "false"
+        },
+        {
+          "command": "dynamodb.saveFavoriteTable",
+          "when": "false"
+        },
+        {
+          "command": "dynamodb.removeFavoriteTable",
+          "when": "false"
+        },
+        {
+          "command": "dynamodb.executeQuery",
+          "when": "false"
+        },
+        {
+          "command": "dynamodb.saveTableChanges",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "dynamodb.searchTables",
+          "when": "view == dynamodbTables",
+          "group": "navigation"
+        },
+        {
+          "command": "dynamodb.clearTableSearch",
+          "when": "view == dynamodbTables && dynamodb.tablesFilterActive",
+          "group": "navigation@1"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "dynamodb.saveFavoriteTable",
+          "when": "view == dynamodbTables && viewItem == dynamodbTable",
+          "group": "dynamodb"
+        },
+        {
+          "command": "dynamodb.removeFavoriteTable",
+          "when": "view == dynamodbTables && viewItem == dynamodbFavoriteTable",
+          "group": "dynamodb"
+        }
+      ]
+    },
     "configuration": {
       "title": "DynamoDB Explorer",
       "properties": {

@@ -9,6 +9,7 @@ import type {
 
 const ACTIVE_PROFILE_KEY = "dynamodb.activeProfile";
 const ACTIVE_REGIONS_KEY = "dynamodb.activeRegionByProfile";
+const FAVORITE_TABLES_KEY = "dynamodb.favoriteTablesByConnection";
 
 export function selectInitialProfile(
   profiles: AwsProfileInfo[],
@@ -70,6 +71,22 @@ export class SessionState {
     return this.tables;
   }
 
+  public getFavoriteTables(): string[] {
+    const connection = this.connection;
+    if (!connection) {
+      return [];
+    }
+
+    const persistedFavorites =
+      this.globalState.get<Record<string, string[]>>(FAVORITE_TABLES_KEY) ?? {};
+
+    return [...(persistedFavorites[getConnectionKey(connection)] ?? [])];
+  }
+
+  public isFavoriteTable(tableName: string): boolean {
+    return this.getFavoriteTables().includes(tableName);
+  }
+
   public setTables(tables: TableSummary[]): void {
     this.tables = tables;
     this.onDidChangeEmitter.fire();
@@ -78,6 +95,39 @@ export class SessionState {
   public clearTables(): void {
     this.tables = [];
     this.onDidChangeEmitter.fire();
+  }
+
+  public async toggleFavoriteTable(tableName: string): Promise<boolean> {
+    return this.setFavoriteTable(tableName, !this.isFavoriteTable(tableName));
+  }
+
+  public async setFavoriteTable(
+    tableName: string,
+    isFavorite: boolean,
+  ): Promise<boolean> {
+    const connection = this.connection;
+    if (!connection) {
+      return false;
+    }
+
+    const persistedFavorites =
+      this.globalState.get<Record<string, string[]>>(FAVORITE_TABLES_KEY) ?? {};
+    const connectionKey = getConnectionKey(connection);
+    const favoriteTables = new Set(persistedFavorites[connectionKey] ?? []);
+
+    if (isFavorite) {
+      favoriteTables.add(tableName);
+    } else {
+      favoriteTables.delete(tableName);
+    }
+
+    persistedFavorites[connectionKey] = [...favoriteTables].sort(
+      (left, right) => left.localeCompare(right),
+    );
+    await this.globalState.update(FAVORITE_TABLES_KEY, persistedFavorites);
+    this.onDidChangeEmitter.fire();
+
+    return isFavorite;
   }
 
   public getConnection(): ConnectionSelection | undefined {
@@ -145,4 +195,8 @@ export class SessionState {
     persistedRegions[profileName] = region;
     await this.globalState.update(ACTIVE_REGIONS_KEY, persistedRegions);
   }
+}
+
+function getConnectionKey(connection: ConnectionSelection): string {
+  return `${connection.profile}:${connection.region}`;
 }

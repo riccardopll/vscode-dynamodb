@@ -35,6 +35,19 @@ export async function activate(
 
   context.subscriptions.push(connectionTreeView, tablesTreeView);
 
+  const syncTableSearchContext = async (): Promise<void> => {
+    await vscode.commands.executeCommand(
+      "setContext",
+      "dynamodb.tablesFilterActive",
+      tableTreeProvider.hasSearchQuery(),
+    );
+  };
+
+  const setTableSearchQuery = async (searchQuery: string): Promise<void> => {
+    tableTreeProvider.setSearchQuery(searchQuery);
+    await syncTableSearchContext();
+  };
+
   const refreshTables = async (showErrors = true): Promise<void> => {
     const connection = sessionState.getConnection();
     if (!connection) {
@@ -134,6 +147,57 @@ export async function activate(
     vscode.commands.registerCommand("dynamodb.refreshTables", async () => {
       await refreshTables();
     }),
+    vscode.commands.registerCommand("dynamodb.searchTables", async () => {
+      const input = vscode.window.createInputBox();
+      input.title = "Search DynamoDB Tables";
+      input.placeholder = "Type a table name";
+      input.value = tableTreeProvider.getSearchQuery();
+
+      const disposables: vscode.Disposable[] = [];
+      disposables.push(
+        input.onDidChangeValue((value) => {
+          void setTableSearchQuery(value);
+        }),
+      );
+      disposables.push(
+        input.onDidAccept(() => {
+          input.hide();
+        }),
+      );
+      disposables.push(
+        input.onDidHide(() => {
+          vscode.Disposable.from(...disposables).dispose();
+          input.dispose();
+        }),
+      );
+
+      input.show();
+    }),
+    vscode.commands.registerCommand("dynamodb.clearTableSearch", async () => {
+      await setTableSearchQuery("");
+    }),
+    vscode.commands.registerCommand(
+      "dynamodb.saveFavoriteTable",
+      async (item?: { tableName?: string } | string) => {
+        const tableName = getTableName(item);
+        if (!tableName) {
+          return;
+        }
+
+        await sessionState.setFavoriteTable(tableName, true);
+      },
+    ),
+    vscode.commands.registerCommand(
+      "dynamodb.removeFavoriteTable",
+      async (item?: { tableName?: string } | string) => {
+        const tableName = getTableName(item);
+        if (!tableName) {
+          return;
+        }
+
+        await sessionState.setFavoriteTable(tableName, false);
+      },
+    ),
     vscode.commands.registerCommand(
       "dynamodb.openTableExplorer",
       async (tableName: string) => {
@@ -182,6 +246,7 @@ export async function activate(
   );
 
   await sessionState.initialize();
+  await syncTableSearchContext();
   syncMessages(connectionTreeView, tablesTreeView, sessionState, undefined);
   await refreshTables(false);
 }
@@ -231,4 +296,14 @@ function getExtensionSettings(): {
     ),
     pageSize: Math.max(1, Math.min(500, configured)),
   };
+}
+
+function getTableName(
+  item?: { tableName?: string } | string,
+): string | undefined {
+  if (typeof item === "string") {
+    return item;
+  }
+
+  return item?.tableName;
 }

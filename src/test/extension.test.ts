@@ -20,6 +20,10 @@ suite("Extension Test Suite", () => {
     assert.ok(commands.includes("dynamodb.selectRegion"));
     assert.ok(commands.includes("dynamodb.refreshProfiles"));
     assert.ok(commands.includes("dynamodb.refreshTables"));
+    assert.ok(commands.includes("dynamodb.searchTables"));
+    assert.ok(commands.includes("dynamodb.clearTableSearch"));
+    assert.ok(commands.includes("dynamodb.saveFavoriteTable"));
+    assert.ok(commands.includes("dynamodb.removeFavoriteTable"));
     assert.ok(commands.includes("dynamodb.openTableExplorer"));
     assert.ok(commands.includes("dynamodb.executeQuery"));
     assert.ok(commands.includes("dynamodb.saveTableChanges"));
