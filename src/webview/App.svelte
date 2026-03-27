@@ -780,6 +780,7 @@
     color: var(--vscode-editor-foreground);
     font-family: var(--vscode-font-family, system-ui, sans-serif);
     font-size: var(--vscode-font-size, 13px);
+    overflow: hidden;
   }
 
   :global(button),
@@ -810,10 +811,42 @@
 
     display: flex;
     flex-direction: column;
-    min-height: 100vh;
+    height: 100vh;
     padding: 10px;
     gap: 10px;
     box-sizing: border-box;
+    overflow-y: scroll;
+    scrollbar-gutter: stable;
+    scrollbar-color: color-mix(
+        in srgb,
+        var(--vscode-editor-foreground) 28%,
+        transparent
+      )
+      color-mix(in srgb, var(--vscode-editor-background) 92%, var(--border));
+    scrollbar-width: auto;
+  }
+
+  .shell::-webkit-scrollbar {
+    width: 12px;
+  }
+
+  .shell::-webkit-scrollbar-track {
+    background: color-mix(
+      in srgb,
+      var(--vscode-editor-background) 92%,
+      var(--border)
+    );
+  }
+
+  .shell::-webkit-scrollbar-thumb {
+    background: color-mix(
+      in srgb,
+      var(--vscode-editor-foreground) 28%,
+      transparent
+    );
+    border: 3px solid
+      color-mix(in srgb, var(--vscode-editor-background) 92%, var(--border));
+    border-radius: 999px;
   }
 
   .controls-panel,
