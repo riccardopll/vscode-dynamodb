@@ -333,21 +333,10 @@ export function buildUpdateItemInput({
     );
   }
 
-  const changedAttributes = Object.keys(originalItem).filter(
-    (attributeName) => {
-      if (isPrimaryKeyAttribute(attributeName, metadata)) {
-        return false;
-      }
-
-      if (!(attributeName in updatedItem)) {
-        return false;
-      }
-
-      return !areValuesEqual(
-        originalItem[attributeName],
-        updatedItem[attributeName],
-      );
-    },
+  const changedAttributes = getChangedEditableAttributes(
+    metadata,
+    originalItem,
+    updatedItem,
   );
 
   if (changedAttributes.length === 0) {
@@ -489,8 +478,21 @@ function getChangedPrimaryKeys(
   return getPrimaryKeys(metadata).filter((key) => {
     const originalValue = requireItemValue(originalItem, key.name);
     const updatedValue = requireItemValue(updatedItem, key.name);
-    return !areKeyValuesEqual(key.type, originalValue, updatedValue);
+    return !areValuesEqual(originalValue, updatedValue);
   });
+}
+
+function getChangedEditableAttributes(
+  metadata: TableMetadata,
+  originalItem: Record<string, unknown>,
+  updatedItem: Record<string, unknown>,
+): string[] {
+  return Object.keys(originalItem).filter(
+    (attributeName) =>
+      !isPrimaryKeyAttribute(attributeName, metadata) &&
+      attributeName in updatedItem &&
+      !areValuesEqual(originalItem[attributeName], updatedItem[attributeName]),
+  );
 }
 
 function requireItemValue(
@@ -502,30 +504,6 @@ function requireItemValue(
   }
 
   return item[attributeName];
-}
-
-function areKeyValuesEqual(
-  keyType: ScalarKeyType,
-  left: unknown,
-  right: unknown,
-): boolean {
-  if (keyType === "B") {
-    return areBinaryValuesEqual(left, right);
-  }
-
-  return Object.is(left, right);
-}
-
-function areBinaryValuesEqual(left: unknown, right: unknown): boolean {
-  if (!(left instanceof Uint8Array) || !(right instanceof Uint8Array)) {
-    return false;
-  }
-
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  return left.every((value, index) => value === right[index]);
 }
 
 function readKeyMetadata(

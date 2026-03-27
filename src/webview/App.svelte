@@ -140,26 +140,7 @@
           requestError = message.message;
           return;
         case "results":
-          if (message.append) {
-            const nextPageIndex = pendingPageIndex ?? pages.length;
-            pages = [
-              ...pages.slice(0, nextPageIndex),
-              {
-                items: message.items,
-                nextCursor: message.cursor,
-              },
-            ];
-            currentPageIndex = nextPageIndex;
-          } else {
-            pages = [
-              {
-                items: message.items,
-                nextCursor: message.cursor,
-              },
-            ];
-            currentPageIndex = 0;
-          }
-
+          applyResultsPage(message.items, message.cursor, message.append);
           pendingPageIndex = undefined;
           clearEditingState();
           return;
@@ -193,12 +174,13 @@
   });
 
   function switchMode(nextMode: ExplorerMode): void {
-    if (!confirmDiscardPendingEdits()) {
+    if (nextMode === mode) {
       return;
     }
 
-    mode = nextMode;
-    resetResults();
+    updateResultContext(() => {
+      mode = nextMode;
+    });
   }
 
   function selectIndex(nextIndexName: string): void {
@@ -206,13 +188,10 @@
       return;
     }
 
-    if (!confirmDiscardPendingEdits()) {
-      return;
-    }
-
-    selectedIndexName = nextIndexName;
-    clearQueryInputs();
-    resetResults();
+    updateResultContext(() => {
+      selectedIndexName = nextIndexName;
+      clearQueryInputs();
+    });
   }
 
   function selectQueryTarget(nextTarget: QueryTarget): void {
@@ -224,13 +203,10 @@
       return;
     }
 
-    if (!confirmDiscardPendingEdits()) {
-      return;
-    }
-
-    queryTarget = nextTarget;
-    clearQueryInputs();
-    resetResults();
+    updateResultContext(() => {
+      queryTarget = nextTarget;
+      clearQueryInputs();
+    });
   }
 
   function updatePartitionKey(value: string): void {
@@ -238,12 +214,9 @@
       return;
     }
 
-    if (!confirmDiscardPendingEdits()) {
-      return;
-    }
-
-    partitionKeyValue = value;
-    resetResults();
+    updateResultContext(() => {
+      partitionKeyValue = value;
+    });
   }
 
   function updateSortKey(value: string): void {
@@ -251,12 +224,9 @@
       return;
     }
 
-    if (!confirmDiscardPendingEdits()) {
-      return;
-    }
-
-    sortKeyValue = value;
-    resetResults();
+    updateResultContext(() => {
+      sortKeyValue = value;
+    });
   }
 
   function runScan(): void {
@@ -483,6 +453,31 @@
     requestError = "";
   }
 
+  function updateResultContext(change: () => void): void {
+    if (!confirmDiscardPendingEdits()) {
+      return;
+    }
+
+    change();
+    resetResults();
+  }
+
+  function applyResultsPage(
+    items: Record<string, unknown>[],
+    nextCursor: DynamoCursor,
+    append: boolean,
+  ): void {
+    if (!append) {
+      pages = [{ items, nextCursor }];
+      currentPageIndex = 0;
+      return;
+    }
+
+    const nextPageIndex = pendingPageIndex ?? pages.length;
+    pages = [...pages.slice(0, nextPageIndex), { items, nextCursor }];
+    currentPageIndex = nextPageIndex;
+  }
+
   function getQueryKeys():
     | {
         partitionKey: KeyMetadata;
@@ -664,7 +659,8 @@
             <span>{queryPartitionKey.name}</span>
             <input
               disabled={loading}
-              on:input={(event) => updatePartitionKey(event.currentTarget.value)}
+              on:input={(event) =>
+                updatePartitionKey(event.currentTarget.value)}
               placeholder={queryPartitionKey.type}
               value={partitionKeyValue}
             />

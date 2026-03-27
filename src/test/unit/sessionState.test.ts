@@ -47,12 +47,7 @@ suite("SessionState profile selection", () => {
   });
 
   test("stores favorite tables per connection", async () => {
-    const sessionState = new SessionState(new FakeMemento(), () => "us-east-1");
-
-    setConnection(sessionState, {
-      profile: "dev",
-      region: "eu-central-1",
-    });
+    const sessionState = await createSessionState();
 
     await sessionState.setFavoriteTable("Users", true);
 
@@ -60,53 +55,45 @@ suite("SessionState profile selection", () => {
   });
 
   test("does not leak favorite tables across connections", async () => {
-    const sessionState = new SessionState(new FakeMemento(), () => "us-east-1");
-
-    setConnection(sessionState, {
-      profile: "dev",
-      region: "eu-central-1",
-    });
+    const sessionState = await createSessionState();
     await sessionState.setFavoriteTable("Users", true);
 
-    setConnection(sessionState, {
-      profile: "dev",
-      region: "us-east-1",
-    });
+    await sessionState.setActiveRegion("us-east-1");
     assert.deepStrictEqual(sessionState.getFavoriteTables(), []);
 
     await sessionState.setFavoriteTable("Orders", true);
     assert.deepStrictEqual(sessionState.getFavoriteTables(), ["Orders"]);
 
-    setConnection(sessionState, {
-      profile: "dev",
-      region: "eu-central-1",
-    });
+    await sessionState.setActiveRegion("eu-central-1");
     assert.deepStrictEqual(sessionState.getFavoriteTables(), ["Users"]);
   });
 
-  test("toggles the same favorite table on and off", async () => {
-    const sessionState = new SessionState(new FakeMemento(), () => "us-east-1");
+  test("adds and removes the same favorite table", async () => {
+    const sessionState = await createSessionState();
 
-    setConnection(sessionState, {
-      profile: "dev",
-      region: "eu-central-1",
-    });
-
-    assert.strictEqual(await sessionState.toggleFavoriteTable("Users"), true);
+    assert.strictEqual(
+      await sessionState.setFavoriteTable("Users", true),
+      true,
+    );
     assert.deepStrictEqual(sessionState.getFavoriteTables(), ["Users"]);
 
-    assert.strictEqual(await sessionState.toggleFavoriteTable("Users"), false);
+    assert.strictEqual(
+      await sessionState.setFavoriteTable("Users", false),
+      false,
+    );
     assert.deepStrictEqual(sessionState.getFavoriteTables(), []);
   });
 });
 
-function setConnection(
-  sessionState: SessionState,
-  connection: { profile: string; region: string },
-): void {
-  (
-    sessionState as unknown as {
-      connection?: { profile: string; region: string };
-    }
-  ).connection = connection;
+async function createSessionState(): Promise<SessionState> {
+  const sessionState = new SessionState(
+    new FakeMemento(),
+    () => "us-east-1",
+    async () => [{ name: "dev" }],
+  );
+
+  await sessionState.initialize();
+  await sessionState.setActiveRegion("eu-central-1");
+
+  return sessionState;
 }

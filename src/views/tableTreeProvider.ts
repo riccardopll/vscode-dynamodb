@@ -39,10 +39,10 @@ export function getVisibleTables(
   const favoriteTableNames = new Set(favoriteTables);
 
   return tables
-    .filter((table) =>
-      normalizedQuery.length === 0
-        ? true
-        : table.name.toLocaleLowerCase().includes(normalizedQuery),
+    .filter(
+      (table) =>
+        normalizedQuery === "" ||
+        table.name.toLocaleLowerCase().includes(normalizedQuery),
     )
     .map((table) => ({
       name: table.name,
@@ -86,10 +86,6 @@ export class TableTreeProvider implements vscode.TreeDataProvider<TableTreeItem>
   public setSearchQuery(searchQuery: string): void {
     this.searchQuery = searchQuery;
     this.refresh();
-  }
-
-  public clearSearchQuery(): void {
-    this.setSearchQuery("");
   }
 
   public getTreeItem(element: TableTreeItem): vscode.TreeItem {

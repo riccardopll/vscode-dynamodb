@@ -33,6 +33,9 @@ export class SessionState {
   public constructor(
     private readonly globalState: vscode.Memento,
     private readonly getConfiguredDefaultRegion: () => string,
+    private readonly loadProfiles: () => Promise<
+      AwsProfileInfo[]
+    > = loadAwsProfiles,
   ) {}
 
   public async initialize(): Promise<void> {
@@ -40,21 +43,11 @@ export class SessionState {
   }
 
   public async reloadProfiles(): Promise<AwsProfileInfo[]> {
-    this.profiles = await loadAwsProfiles();
+    this.profiles = await this.loadProfiles();
     const persistedProfile = this.globalState.get<string>(ACTIVE_PROFILE_KEY);
-
-    if (this.profiles.length === 0) {
-      this.connection = undefined;
-      this.tables = [];
-      this.onDidChangeEmitter.fire();
-      return this.profiles;
-    }
-
     const nextProfile = selectInitialProfile(this.profiles, persistedProfile);
     if (!nextProfile) {
-      this.connection = undefined;
-      this.tables = [];
-      this.onDidChangeEmitter.fire();
+      this.clearConnectionState();
       return this.profiles;
     }
 
@@ -77,10 +70,10 @@ export class SessionState {
       return [];
     }
 
-    const persistedFavorites =
-      this.globalState.get<Record<string, string[]>>(FAVORITE_TABLES_KEY) ?? {};
-
-    return [...(persistedFavorites[getConnectionKey(connection)] ?? [])];
+    return [
+      ...(this.getPersistedFavoriteTables()[getConnectionKey(connection)] ??
+        []),
+    ];
   }
 
   public isFavoriteTable(tableName: string): boolean {
@@ -97,10 +90,6 @@ export class SessionState {
     this.onDidChangeEmitter.fire();
   }
 
-  public async toggleFavoriteTable(tableName: string): Promise<boolean> {
-    return this.setFavoriteTable(tableName, !this.isFavoriteTable(tableName));
-  }
-
   public async setFavoriteTable(
     tableName: string,
     isFavorite: boolean,
@@ -110,8 +99,7 @@ export class SessionState {
       return false;
     }
 
-    const persistedFavorites =
-      this.globalState.get<Record<string, string[]>>(FAVORITE_TABLES_KEY) ?? {};
+    const persistedFavorites = this.getPersistedFavoriteTables();
     const connectionKey = getConnectionKey(connection);
     const favoriteTables = new Set(persistedFavorites[connectionKey] ?? []);
 
@@ -194,6 +182,18 @@ export class SessionState {
 
     persistedRegions[profileName] = region;
     await this.globalState.update(ACTIVE_REGIONS_KEY, persistedRegions);
+  }
+
+  private clearConnectionState(): void {
+    this.connection = undefined;
+    this.tables = [];
+    this.onDidChangeEmitter.fire();
+  }
+
+  private getPersistedFavoriteTables(): Record<string, string[]> {
+    return (
+      this.globalState.get<Record<string, string[]>>(FAVORITE_TABLES_KEY) ?? {}
+    );
   }
 }
 

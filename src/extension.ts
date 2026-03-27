@@ -52,22 +52,26 @@ export async function activate(
     const connection = sessionState.getConnection();
     if (!connection) {
       tableTreeProvider.refresh("Select an AWS profile to begin");
-      syncMessages(connectionTreeView, tablesTreeView, sessionState, undefined);
+      connectionTreeView.message = "No AWS profiles found";
+      tablesTreeView.message = undefined;
       return;
     }
 
     tableTreeProvider.refresh("Loading DynamoDB tables...");
-    syncMessages(connectionTreeView, tablesTreeView, sessionState, undefined);
+    connectionTreeView.message = `${connection.profile} / ${connection.region}`;
+    tablesTreeView.message = undefined;
 
     try {
       const tables = await service.listTables(connection);
       sessionState.setTables(tables);
-      syncMessages(connectionTreeView, tablesTreeView, sessionState, undefined);
+      connectionTreeView.message = `${connection.profile} / ${connection.region}`;
+      tablesTreeView.message = undefined;
     } catch (error) {
       sessionState.clearTables();
       const message = getErrorMessage(error);
       tableTreeProvider.refresh("Unable to load tables");
-      syncMessages(connectionTreeView, tablesTreeView, sessionState, message);
+      connectionTreeView.message = `${connection.profile} / ${connection.region}`;
+      tablesTreeView.message = message;
       if (showErrors) {
         void vscode.window.showErrorMessage(
           `Unable to load DynamoDB tables for ${connection.profile} in ${connection.region}: ${message}`,
@@ -129,16 +133,19 @@ export async function activate(
     vscode.commands.registerCommand("dynamodb.refreshProfiles", async () => {
       try {
         await sessionState.reloadProfiles();
-        syncMessages(
-          connectionTreeView,
-          tablesTreeView,
-          sessionState,
-          undefined,
-        );
+        const connection = sessionState.getConnection();
+        connectionTreeView.message = connection
+          ? `${connection.profile} / ${connection.region}`
+          : "No AWS profiles found";
+        tablesTreeView.message = undefined;
         await refreshTables(false);
       } catch (error) {
         const message = getErrorMessage(error);
-        syncMessages(connectionTreeView, tablesTreeView, sessionState, message);
+        const connection = sessionState.getConnection();
+        connectionTreeView.message = connection
+          ? `${connection.profile} / ${connection.region}`
+          : "No AWS profiles found";
+        tablesTreeView.message = message;
         void vscode.window.showErrorMessage(
           `Unable to refresh AWS profiles: ${message}`,
         );
@@ -247,25 +254,17 @@ export async function activate(
 
   await sessionState.initialize();
   await syncTableSearchContext();
-  syncMessages(connectionTreeView, tablesTreeView, sessionState, undefined);
+  {
+    const connection = sessionState.getConnection();
+    connectionTreeView.message = connection
+      ? `${connection.profile} / ${connection.region}`
+      : "No AWS profiles found";
+    tablesTreeView.message = undefined;
+  }
   await refreshTables(false);
 }
 
 export function deactivate(): void {}
-
-function syncMessages(
-  connectionTreeView: vscode.TreeView<unknown>,
-  tablesTreeView: vscode.TreeView<unknown>,
-  sessionState: SessionState,
-  tableErrorMessage: string | undefined,
-): void {
-  const connection = sessionState.getConnection();
-  connectionTreeView.message = connection
-    ? `${connection.profile} / ${connection.region}`
-    : "No AWS profiles found";
-
-  tablesTreeView.message = tableErrorMessage;
-}
 
 function buildRegionQuickPickItems(
   connection: ConnectionSelection,

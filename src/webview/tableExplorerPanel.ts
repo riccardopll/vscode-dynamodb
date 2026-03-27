@@ -58,26 +58,29 @@ export class TableExplorerPanel implements vscode.Disposable {
   }
 
   public static requestSaveForActivePanel(): boolean {
-    const activePanel = TableExplorerPanel.activePanel;
-    if (!activePanel || !activePanel.panel.active) {
-      return false;
-    }
-
-    activePanel.postMessage({
+    return TableExplorerPanel.requestForActivePanel({
       type: "saveRequested",
     });
-    return true;
   }
 
   public static requestRunForActivePanel(): boolean {
+    return TableExplorerPanel.requestForActivePanel({
+      type: "executeRequested",
+    });
+  }
+
+  private static requestForActivePanel(
+    message: Extract<
+      ExtensionToWebviewMessage,
+      { type: "executeRequested" | "saveRequested" }
+    >,
+  ): boolean {
     const activePanel = TableExplorerPanel.activePanel;
     if (!activePanel || !activePanel.panel.active) {
       return false;
     }
 
-    activePanel.postMessage({
-      type: "executeRequested",
-    });
+    activePanel.postMessage(message);
     return true;
   }
 

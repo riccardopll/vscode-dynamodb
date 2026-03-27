@@ -21,7 +21,7 @@ class FakeMemento {
 
 suite("TableTreeProvider", () => {
   test("shows favorites before other tables and sorts alphabetically", async () => {
-    const sessionState = createSessionState([
+    const sessionState = await createSessionState([
       "Users",
       "Accounts",
       "Orders",
@@ -41,7 +41,7 @@ suite("TableTreeProvider", () => {
   });
 
   test("filters matching tables and keeps favorites first", async () => {
-    const sessionState = createSessionState([
+    const sessionState = await createSessionState([
       "Users",
       "Orders",
       "OrderArchive",
@@ -55,8 +55,8 @@ suite("TableTreeProvider", () => {
     assert.deepStrictEqual(getLabels(provider), ["OrderArchive", "Orders"]);
   });
 
-  test("shows an explicit empty state when a search has no matches", () => {
-    const sessionState = createSessionState(["Users", "Orders"]);
+  test("shows an explicit empty state when a search has no matches", async () => {
+    const sessionState = await createSessionState(["Users", "Orders"]);
     const provider = new TableTreeProvider(sessionState);
 
     provider.setSearchQuery("missing");
@@ -65,23 +65,16 @@ suite("TableTreeProvider", () => {
   });
 });
 
-function createSessionState(tableNames: string[]): SessionState {
-  const sessionState = new SessionState(new FakeMemento(), () => "us-east-1");
+async function createSessionState(tableNames: string[]): Promise<SessionState> {
+  const sessionState = new SessionState(
+    new FakeMemento(),
+    () => "us-east-1",
+    async () => [{ name: "dev" }],
+  );
 
-  (
-    sessionState as unknown as {
-      connection?: { profile: string; region: string };
-      tables?: { name: string }[];
-    }
-  ).connection = {
-    profile: "dev",
-    region: "eu-central-1",
-  };
-  (
-    sessionState as unknown as {
-      tables?: { name: string }[];
-    }
-  ).tables = tableNames.map((name) => ({ name }));
+  await sessionState.initialize();
+  await sessionState.setActiveRegion("eu-central-1");
+  sessionState.setTables(tableNames.map((name) => ({ name })));
 
   return sessionState;
 }
