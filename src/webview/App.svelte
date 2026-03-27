@@ -15,7 +15,7 @@
     ExtensionToWebviewMessage,
     WebviewToExtensionMessage,
   } from "./protocol";
-  import { collectResultColumns } from "./results";
+  import { collectColumnMinWidths, collectResultColumns } from "./results";
   interface ResultPage {
     items: Record<string, unknown>[];
     nextCursor?: DynamoCursor;
@@ -88,7 +88,13 @@
   $: querySortKey = queryKeys?.sortKey;
   $: currentPage = pages[currentPageIndex];
   $: items = currentPage?.items ?? [];
-  $: columns = collectResultColumns(items, bootstrap.metadata);
+  $: loadedItems = pages.flatMap((page) => page.items);
+  $: columns = collectResultColumns(loadedItems, bootstrap.metadata);
+  $: columnMinWidths = collectColumnMinWidths(
+    columns,
+    loadedItems,
+    bootstrap.metadata,
+  );
   $: hasResults = items.length > 0;
   $: canRunQuery =
     !loading && (queryTarget === "table" || Boolean(selectedIndex));
@@ -748,6 +754,7 @@
       {#if hasResults}
         <ResultsTable
           {columns}
+          {columnMinWidths}
           {items}
           metadata={bootstrap.metadata}
           busy={loading}

@@ -1,6 +1,9 @@
 import * as assert from "assert";
 
-import { collectResultColumns } from "../../webview/results";
+import {
+  collectColumnMinWidths,
+  collectResultColumns,
+} from "../../webview/results";
 
 suite("Result helpers", () => {
   test("collects sorted top-level columns with partition key first", () => {
@@ -36,5 +39,25 @@ suite("Result helpers", () => {
       "status",
       "total",
     ]);
+  });
+
+  test("collects buffered minimum widths from the widest loaded content", () => {
+    const widths = collectColumnMinWidths(
+      ["id", "payload", "sortKey"],
+      [
+        { id: "1", payload: "short", sortKey: 7 },
+        { id: "22", payload: { status: "expanded" }, sortKey: 12 },
+      ],
+      {
+        partitionKey: { name: "id", type: "S" },
+        sortKey: { name: "sortKey", type: "N" },
+      },
+    );
+
+    assert.deepStrictEqual(widths, {
+      id: "5ch",
+      payload: "21ch",
+      sortKey: "10ch",
+    });
   });
 });

@@ -18,6 +18,7 @@
   }
 
   export let columns: string[];
+  export let columnMinWidths: Record<string, string> = {};
   export let items: Record<string, unknown>[];
   export let metadata: TableMetadata;
   export let dirtyRows: string[] = [];
@@ -69,6 +70,10 @@
     }
 
     return formatEditableValue(getDisplayValue(item, column));
+  }
+
+  function getColumnMinWidth(column: string): string | undefined {
+    return columnMinWidths[column];
   }
 
   function getEditorSize(item: Record<string, unknown>, column: string): number {
@@ -128,7 +133,10 @@
       <thead>
         <tr>
           {#each columns as column (column)}
-            <th class:key-column={isPartitionKeyColumn(column, metadata)}>
+            <th
+              class:key-column={isPartitionKeyColumn(column, metadata)}
+              style:min-width={getColumnMinWidth(column)}
+            >
               <div class="header-cell">
                 <span>{column}</span>
                 {#if getColumnRole(column)}
@@ -150,6 +158,7 @@
                 class:dirty-cell={isDirtyCell(rowKey, column)}
                 class:invalid-cell={isInvalidCell(rowKey, column)}
                 class:key-cell={isPartitionKeyColumn(column, metadata)}
+                style:min-width={getColumnMinWidth(column)}
                 on:click={(event) => {
                   if (editable) {
                     focusCellEditor(event.currentTarget);
@@ -255,7 +264,7 @@
     top: 0;
     z-index: 1;
     height: var(--header-height);
-    padding: 0 10px;
+    padding: 0 12px;
     vertical-align: middle;
     background: color-mix(
       in srgb,
@@ -327,10 +336,9 @@
   .cell-value,
   .cell-editor {
     display: block;
-    max-width: 48ch;
     min-width: 0;
     margin: 0;
-    padding: 8px 10px;
+    padding: 8px 12px;
     overflow: hidden;
     border: 0;
     background: transparent;
