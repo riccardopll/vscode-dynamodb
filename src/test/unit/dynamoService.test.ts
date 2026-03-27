@@ -5,6 +5,7 @@ import {
   buildIndexQueryInput,
   buildReplaceItemTransactionInput,
   buildUpdateItemInput,
+  collectResultPage,
   toAttributeValue,
   unmarshallItems,
 } from "../../aws/dynamoService";
@@ -81,6 +82,49 @@ suite("DynamoDB service helpers", () => {
     ]);
 
     assert.deepStrictEqual(items, [{ id: "1", count: 2 }]);
+  });
+
+  test("collects multiple DynamoDB pages until the requested page size is filled", async () => {
+    const firstCursor = { id: { S: "2" } };
+    const secondCursor = { id: { S: "3" } };
+    const limits: number[] = [];
+
+    const page = await collectResultPage(3, async (limit, cursor) => {
+      limits.push(limit);
+
+      if (!cursor) {
+        return {
+          Items: [{ id: { S: "1" } }],
+          LastEvaluatedKey: firstCursor,
+        };
+      }
+
+      if (cursor === firstCursor) {
+        return {
+          Items: [
+            { id: { S: "2" } },
+            { id: { S: "3" } },
+          ],
+          LastEvaluatedKey: secondCursor,
+        };
+      }
+
+      throw new Error("Unexpected cursor.");
+    });
+
+    assert.deepStrictEqual(page.items, [{ id: "1" }, { id: "2" }, { id: "3" }]);
+    assert.deepStrictEqual(page.lastEvaluatedKey, secondCursor);
+    assert.deepStrictEqual(limits, [3, 2]);
+  });
+
+  test("stops collecting when DynamoDB has no more pages", async () => {
+    const page = await collectResultPage(3, async () => ({
+      Items: [{ id: { S: "1" } }],
+      LastEvaluatedKey: undefined,
+    }));
+
+    assert.deepStrictEqual(page.items, [{ id: "1" }]);
+    assert.strictEqual(page.lastEvaluatedKey, undefined);
   });
 
   test("builds the correct DynamoDB key for partition-only tables", () => {

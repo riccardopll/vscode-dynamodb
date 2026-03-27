@@ -520,69 +520,73 @@
 
 <div class="shell">
   <section class="controls-panel">
-    <div class="controls-row">
-      <label class="field mode-field">
-        <span>Mode</span>
-        <select
-          disabled={loading}
-          on:change={(event) => switchMode(event.currentTarget.value as ExplorerMode)}
-          value={mode}
-        >
-          <option value="scan">Scan table</option>
-          <option disabled={queryIndexes.length === 0} value="query-index">Query GSI</option>
-        </select>
-      </label>
-
-      {#if mode === "query-index"}
-        <label class="field">
-          <span>Index</span>
+    <div class="controls-stack">
+      <div class="primary-controls">
+        <label class="field mode-field">
+          <span>Mode</span>
           <select
-            disabled={loading || queryIndexes.length === 0}
-            on:change={(event) => selectIndex(event.currentTarget.value)}
-            value={selectedIndexName}
+            disabled={loading}
+            on:change={(event) => switchMode(event.currentTarget.value as ExplorerMode)}
+            value={mode}
           >
-            {#each queryIndexes as index (index.name)}
-              <option value={index.name}>{index.name}</option>
-            {/each}
+            <option value="scan">Scan table</option>
+            <option disabled={queryIndexes.length === 0} value="query-index">Query GSI</option>
           </select>
         </label>
 
-        {#if selectedIndex}
+        <div class="actions">
+          <button
+            aria-label={mode === "scan" ? "Run Scan" : "Run Query"}
+            class="run-button"
+            disabled={loading || (mode === "query-index" && !canRunQuery)}
+            on:click={runActiveRequest}
+            type="button"
+          >
+            ▶
+          </button>
+        </div>
+      </div>
+
+      {#if mode === "query-index"}
+        <div class="query-fields">
           <label class="field">
-            <span>{selectedIndex.partitionKey.name}</span>
-            <input
-              disabled={loading}
-              on:input={(event) => updatePartitionKey(event.currentTarget.value)}
-              placeholder={selectedIndex.partitionKey.type}
-              value={partitionKeyValue}
-            />
+            <span>Index</span>
+            <select
+              disabled={loading || queryIndexes.length === 0}
+              on:change={(event) => selectIndex(event.currentTarget.value)}
+              value={selectedIndexName}
+            >
+              {#each queryIndexes as index (index.name)}
+                <option value={index.name}>{index.name}</option>
+              {/each}
+            </select>
           </label>
 
-          {#if selectedIndex.sortKey}
+          {#if selectedIndex}
             <label class="field">
-              <span>{selectedIndex.sortKey.name}</span>
+              <span>{selectedIndex.partitionKey.name}</span>
               <input
                 disabled={loading}
-                on:input={(event) => updateSortKey(event.currentTarget.value)}
-                placeholder={selectedIndex.sortKey.type}
-                value={sortKeyValue}
+                on:input={(event) => updatePartitionKey(event.currentTarget.value)}
+                placeholder={selectedIndex.partitionKey.type}
+                value={partitionKeyValue}
               />
             </label>
-          {/if}
-        {/if}
-      {/if}
 
-      <div class="actions">
-        <button
-          aria-label={mode === "scan" ? "Run Scan" : "Run Query"}
-          class="run-button"
-          disabled={loading || (mode === "query-index" && !canRunQuery)}
-          on:click={runActiveRequest}
-          type="button"
-        >
-          ▶
-        </button>
-      </div>
+            {#if selectedIndex.sortKey}
+              <label class="field">
+                <span>{selectedIndex.sortKey.name}</span>
+                <input
+                  disabled={loading}
+                  on:input={(event) => updateSortKey(event.currentTarget.value)}
+                  placeholder={selectedIndex.sortKey.type}
+                  value={sortKeyValue}
+                />
+              </label>
+            {/if}
+          {/if}
+        </div>
+      {/if}
     </div>
 
     <div class="meta-row">
@@ -605,33 +609,29 @@
           Save changes?
         </button>
       {/if}
-      <div
-        aria-hidden={pages.length === 0}
-        aria-label="Pagination"
-        class="pager"
-        class:pager-hidden={pages.length === 0}
-        role="group"
-      >
-        <button
-          aria-label="Previous page"
-          class="pager-button"
-          disabled={!canGoPrevious}
-          on:click={showPreviousPage}
-          type="button"
-        >
-          ←
-        </button>
-        <span class="pager-label">Page {currentPageNumber}</span>
-        <button
-          aria-label="Next page"
-          class="pager-button"
-          disabled={!canGoNext}
-          on:click={loadMore}
-          type="button"
-        >
-          →
-        </button>
-      </div>
+      {#if pages.length > 0}
+        <div aria-label="Pagination" class="pager" role="group">
+          <button
+            aria-label="Previous page"
+            class="pager-button"
+            disabled={!canGoPrevious}
+            on:click={showPreviousPage}
+            type="button"
+          >
+            ←
+          </button>
+          <span class="pager-label">Page {currentPageNumber}</span>
+          <button
+            aria-label="Next page"
+            class="pager-button"
+            disabled={!canGoNext}
+            on:click={loadMore}
+            type="button"
+          >
+            →
+          </button>
+        </div>
+      {/if}
     </div>
 
     {#if error}
@@ -723,15 +723,39 @@
     padding: 10px;
   }
 
-  .controls-row {
-    display: grid;
+  .controls-stack {
+    display: flex;
+    flex-direction: column;
     gap: 10px;
+  }
+
+  .primary-controls {
+    display: flex;
+    align-items: end;
+    gap: 10px;
+    flex-wrap: nowrap;
+  }
+
+  .mode-field {
+    flex: 0 1 320px;
+    width: min(320px, 100%);
+    min-width: 0;
+  }
+
+  .query-fields {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
   }
 
   .field {
     display: grid;
     gap: 4px;
     min-width: 0;
+  }
+
+  .query-fields .field {
+    flex: 1 1 180px;
   }
 
   .field span,
@@ -760,9 +784,8 @@
 
   .actions {
     display: flex;
-    gap: 8px;
     align-items: end;
-    flex-wrap: wrap;
+    flex: 0 0 auto;
   }
 
   .run-button,
@@ -784,11 +807,6 @@
     align-items: center;
     gap: 2px;
     margin-left: auto;
-  }
-
-  .pager-hidden {
-    visibility: hidden;
-    pointer-events: none;
   }
 
   .pager-button {
@@ -890,17 +908,4 @@
     outline-offset: -1px;
   }
 
-  @media (min-width: 980px) {
-    .controls-row {
-      grid-template-columns:
-        minmax(140px, 180px)
-        repeat(3, minmax(0, 1fr))
-        auto;
-      align-items: end;
-    }
-
-    .mode-field {
-      grid-column: span 1;
-    }
-  }
 </style>

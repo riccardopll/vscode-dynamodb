@@ -43,6 +43,11 @@ interface UpdateItemInputArgs {
   updatedItem: Record<string, unknown>;
 }
 
+interface DynamoPageResponse {
+  Items?: Record<string, AttributeValue>[];
+  LastEvaluatedKey?: Record<string, AttributeValue>;
+}
+
 export class DynamoService {
   public async listTables(
     connection: ConnectionSelection,
@@ -87,18 +92,18 @@ export class DynamoService {
     cursor?: DynamoCursor,
   ): Promise<ResultPage> {
     const client = createDynamoDbClient(connection);
-    const response = await client.send(
-      new ScanCommand({
-        TableName: tableName,
-        Limit: pageSize,
-        ExclusiveStartKey: cursor,
-      }),
+    return collectResultPage(
+      pageSize,
+      (limit, pageCursor) =>
+        client.send(
+          new ScanCommand({
+            TableName: tableName,
+            Limit: limit,
+            ExclusiveStartKey: pageCursor,
+          }),
+        ),
+      cursor,
     );
-
-    return {
-      items: unmarshallItems(response.Items),
-      lastEvaluatedKey: response.LastEvaluatedKey,
-    };
   }
 
   public async queryIndex(
@@ -206,6 +211,35 @@ export function unmarshallItems(
   return (items ?? []).map(
     (item) => unmarshall(item) as Record<string, unknown>,
   );
+}
+
+export async function collectResultPage(
+  pageSize: number,
+  loadPage: (
+    limit: number,
+    cursor?: DynamoCursor,
+  ) => Promise<DynamoPageResponse>,
+  cursor?: DynamoCursor,
+): Promise<ResultPage> {
+  const items: Record<string, unknown>[] = [];
+  let nextCursor = cursor;
+
+  while (items.length < pageSize) {
+    const response = await loadPage(pageSize - items.length, nextCursor);
+    const pageItems = unmarshallItems(response.Items);
+
+    items.push(...pageItems);
+    nextCursor = response.LastEvaluatedKey;
+
+    if (!nextCursor || pageItems.length === 0) {
+      break;
+    }
+  }
+
+  return {
+    items,
+    lastEvaluatedKey: nextCursor,
+  };
 }
 
 export function getErrorMessage(error: unknown): string {
