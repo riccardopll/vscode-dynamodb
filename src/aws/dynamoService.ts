@@ -36,6 +36,26 @@ interface QueryIndexInputArgs {
   cursor?: DynamoCursor;
 }
 
+interface QueryTableInputArgs {
+  tableName: string;
+  metadata: Pick<TableMetadata, "partitionKey" | "sortKey">;
+  partitionKeyValue: string;
+  sortKeyValue?: string;
+  pageSize: number;
+  cursor?: DynamoCursor;
+}
+
+interface QueryInputArgs {
+  tableName: string;
+  partitionKey: KeyMetadata;
+  sortKey?: KeyMetadata;
+  partitionKeyValue: string;
+  sortKeyValue?: string;
+  pageSize: number;
+  cursor?: DynamoCursor;
+  indexName?: string;
+}
+
 interface UpdateItemInputArgs {
   tableName: string;
   metadata: TableMetadata;
@@ -110,15 +130,52 @@ export class DynamoService {
     connection: ConnectionSelection,
     input: QueryIndexInputArgs,
   ): Promise<ResultPage> {
-    const client = createDynamoDbClient(connection);
-    const response = await client.send(
-      new QueryCommand(buildIndexQueryInput(input)),
-    );
+    return this.queryItems(connection, {
+      tableName: input.tableName,
+      indexName: input.index.name,
+      partitionKey: input.index.partitionKey,
+      sortKey: input.index.sortKey,
+      partitionKeyValue: input.partitionKeyValue,
+      sortKeyValue: input.sortKeyValue,
+      pageSize: input.pageSize,
+      cursor: input.cursor,
+    });
+  }
 
-    return {
-      items: unmarshallItems(response.Items),
-      lastEvaluatedKey: response.LastEvaluatedKey,
-    };
+  public async queryTable(
+    connection: ConnectionSelection,
+    input: QueryTableInputArgs,
+  ): Promise<ResultPage> {
+    return this.queryItems(connection, {
+      tableName: input.tableName,
+      partitionKey: input.metadata.partitionKey,
+      sortKey: input.metadata.sortKey,
+      partitionKeyValue: input.partitionKeyValue,
+      sortKeyValue: input.sortKeyValue,
+      pageSize: input.pageSize,
+      cursor: input.cursor,
+    });
+  }
+
+  private async queryItems(
+    connection: ConnectionSelection,
+    input: QueryInputArgs,
+  ): Promise<ResultPage> {
+    const client = createDynamoDbClient(connection);
+    return collectResultPage(
+      input.pageSize,
+      (limit, pageCursor) =>
+        client.send(
+          new QueryCommand(
+            buildQueryInput({
+              ...input,
+              pageSize: limit,
+              cursor: pageCursor,
+            }),
+          ),
+        ),
+      input.cursor,
+    );
   }
 
   public async updateItem(
@@ -150,26 +207,28 @@ export class DynamoService {
   }
 }
 
-export function buildIndexQueryInput({
+export function buildQueryInput({
   tableName,
-  index,
+  partitionKey,
+  sortKey,
   partitionKeyValue,
   sortKeyValue,
   pageSize,
   cursor,
-}: QueryIndexInputArgs): QueryCommandInput {
+  indexName,
+}: QueryInputArgs): QueryCommandInput {
   const expressionAttributeNames: Record<string, string> = {
-    "#pk": index.partitionKey.name,
+    "#pk": partitionKey.name,
   };
   const expressionAttributeValues: Record<string, AttributeValue> = {
-    ":pk": toAttributeValue(index.partitionKey.type, partitionKeyValue),
+    ":pk": toAttributeValue(partitionKey.type, partitionKeyValue),
   };
 
   let keyConditionExpression = "#pk = :pk";
-  if (index.sortKey && sortKeyValue) {
-    expressionAttributeNames["#sk"] = index.sortKey.name;
+  if (sortKey && sortKeyValue) {
+    expressionAttributeNames["#sk"] = sortKey.name;
     expressionAttributeValues[":sk"] = toAttributeValue(
-      index.sortKey.type,
+      sortKey.type,
       sortKeyValue,
     );
     keyConditionExpression += " AND #sk = :sk";
@@ -177,7 +236,7 @@ export function buildIndexQueryInput({
 
   return {
     TableName: tableName,
-    IndexName: index.name,
+    IndexName: indexName,
     KeyConditionExpression: keyConditionExpression,
     ExpressionAttributeNames: expressionAttributeNames,
     ExpressionAttributeValues: expressionAttributeValues,

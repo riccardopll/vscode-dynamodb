@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
 
-  import type { DynamoCursor, ExplorerMode } from "../types";
+  import type { DynamoCursor, ExplorerMode, KeyMetadata } from "../types";
   import ResultsTable from "./components/ResultsTable.svelte";
   import {
     formatEditableValue,
@@ -27,7 +27,15 @@
 
   interface QueryRequestIndex {
     type: "runQuery";
+    target: "index";
     indexName: string;
+    partitionKeyValue: string;
+    sortKeyValue?: string;
+  }
+
+  interface QueryRequestTable {
+    type: "runQuery";
+    target: "table";
     partitionKeyValue: string;
     sortKeyValue?: string;
   }
@@ -38,7 +46,9 @@
     value: string;
   }
 
-  type QueryRequest = QueryRequestScan | QueryRequestIndex;
+  type QueryRequest = QueryRequestScan | QueryRequestIndex | QueryRequestTable;
+  type QueryDefinition = QueryRequestIndex | QueryRequestTable;
+  type QueryTarget = QueryDefinition["target"];
   type BusyAction = "query" | "save" | undefined;
 
   interface VsCodeApi {
@@ -49,7 +59,9 @@
   export let vscode: VsCodeApi;
 
   let mode: ExplorerMode = "scan";
-  let selectedIndexName = bootstrap.metadata.globalSecondaryIndexes[0]?.name ?? "";
+  let queryTarget: QueryTarget = "table";
+  let selectedIndexName =
+    bootstrap.metadata.globalSecondaryIndexes[0]?.name ?? "";
   let partitionKeyValue = "";
   let sortKeyValue = "";
   let pages: ResultPage[] = [];
@@ -71,20 +83,19 @@
   $: selectedIndex = queryIndexes.find(
     (index) => index.name === selectedIndexName,
   );
+  $: queryKeys = getQueryKeys();
+  $: queryPartitionKey = queryKeys?.partitionKey;
+  $: querySortKey = queryKeys?.sortKey;
   $: currentPage = pages[currentPageIndex];
   $: items = currentPage?.items ?? [];
-  $: columns = collectResultColumns(
-    items,
-    bootstrap.metadata,
-  );
+  $: columns = collectResultColumns(items, bootstrap.metadata);
   $: hasResults = items.length > 0;
-  $: canRunQuery = Boolean(selectedIndex) && !loading;
+  $: canRunQuery =
+    !loading && (queryTarget === "table" || Boolean(selectedIndex));
   $: canGoPrevious = !loading && currentPageIndex > 0;
   $: canGoNext =
     !loading &&
-    Boolean(
-      (currentPageIndex < pages.length - 1) || currentPage?.nextCursor,
-    );
+    Boolean(currentPageIndex < pages.length - 1 || currentPage?.nextCursor);
   $: currentPageNumber = currentPageIndex + 1;
   $: dirtyRowKeys = Object.keys(dirtyColumnsByRowKey);
   $: invalidCellKeys = Object.keys(invalidCells);
@@ -96,8 +107,13 @@
   $: canSave =
     !loading && dirtyRowKeys.length > 0 && invalidCellKeys.length === 0;
   $: busyLabel =
-    busyAction === "save" && loading ? "Saving..." : loading ? "Running..." : "";
-  $: validationError = invalidCellKeys.length > 0 ? invalidCells[invalidCellKeys[0]] : "";
+    busyAction === "save" && loading
+      ? "Saving..."
+      : loading
+        ? "Running..."
+        : "";
+  $: validationError =
+    invalidCellKeys.length > 0 ? invalidCells[invalidCellKeys[0]] : "";
   $: error = validationError || requestError;
 
   onMount(() => {
@@ -168,10 +184,6 @@
   });
 
   function switchMode(nextMode: ExplorerMode): void {
-    if (nextMode === "query-index" && queryIndexes.length === 0) {
-      return;
-    }
-
     if (!confirmDiscardPendingEdits()) {
       return;
     }
@@ -190,8 +202,25 @@
     }
 
     selectedIndexName = nextIndexName;
-    partitionKeyValue = "";
-    sortKeyValue = "";
+    clearQueryInputs();
+    resetResults();
+  }
+
+  function selectQueryTarget(nextTarget: QueryTarget): void {
+    if (nextTarget === queryTarget) {
+      return;
+    }
+
+    if (nextTarget === "index" && queryIndexes.length === 0) {
+      return;
+    }
+
+    if (!confirmDiscardPendingEdits()) {
+      return;
+    }
+
+    queryTarget = nextTarget;
+    clearQueryInputs();
     resetResults();
   }
 
@@ -229,28 +258,29 @@
   }
 
   function runQuery(): void {
-    if (!selectedIndex) {
-      requestError = "Select an index before running a query.";
+    if (!queryKeys) {
+      requestError =
+        queryTarget === "table"
+          ? "Table key metadata is unavailable."
+          : "Select an index before running a query.";
       return;
     }
 
     if (!partitionKeyValue.trim()) {
-      requestError = `${selectedIndex.partitionKey.name} is required.`;
+      requestError = `${queryKeys.partitionKey.name} is required.`;
+      return;
+    }
+
+    const nextQuery = buildQueryRequest();
+    if (!nextQuery) {
+      requestError = "Select an index before running a query.";
       return;
     }
 
     resetResults();
-
-    const nextQuery: QueryRequest = {
-      type: "runQuery",
-      indexName: selectedIndex.name,
-      partitionKeyValue,
-      sortKeyValue: sortKeyValue || undefined,
-    };
-
     lastQuery = nextQuery;
     busyAction = "query";
-    postMessage(nextQuery);
+    postQueryRequest(nextQuery);
   }
 
   function runActiveRequest(): void {
@@ -287,22 +317,7 @@
 
     pendingPageIndex = currentPageIndex + 1;
     busyAction = "query";
-
-    if (lastQuery.type === "runScan") {
-      postMessage({
-        type: "runScan",
-        cursor,
-      });
-      return;
-    }
-
-    postMessage({
-      type: "runQuery",
-      indexName: lastQuery.indexName,
-      partitionKeyValue: lastQuery.partitionKeyValue,
-      sortKeyValue: lastQuery.sortKeyValue,
-      cursor,
-    });
+    postQueryRequest(lastQuery, cursor);
   }
 
   function showPreviousPage(): void {
@@ -348,7 +363,9 @@
 
     invalidCells = omitKey(invalidCells, cellKey);
 
-    const nextEditedRow = structuredClone(editedRowsByKey[rowKey] ?? originalRow);
+    const nextEditedRow = structuredClone(
+      editedRowsByKey[rowKey] ?? originalRow,
+    );
     nextEditedRow[column] = result.value;
 
     const nextDirtyColumns = getDirtyColumns(
@@ -457,6 +474,72 @@
     requestError = "";
   }
 
+  function getQueryKeys():
+    | {
+        partitionKey: KeyMetadata;
+        sortKey?: KeyMetadata;
+      }
+    | undefined {
+    if (queryTarget === "table") {
+      return {
+        partitionKey: bootstrap.metadata.partitionKey,
+        sortKey: bootstrap.metadata.sortKey,
+      };
+    }
+
+    if (!selectedIndex) {
+      return undefined;
+    }
+
+    return {
+      partitionKey: selectedIndex.partitionKey,
+      sortKey: selectedIndex.sortKey,
+    };
+  }
+
+  function buildQueryRequest(): QueryDefinition | undefined {
+    if (queryTarget === "table") {
+      return {
+        type: "runQuery",
+        target: "table",
+        partitionKeyValue,
+        sortKeyValue: sortKeyValue || undefined,
+      };
+    }
+
+    if (!selectedIndex) {
+      return undefined;
+    }
+
+    return {
+      type: "runQuery",
+      target: "index",
+      indexName: selectedIndex.name,
+      partitionKeyValue,
+      sortKeyValue: sortKeyValue || undefined,
+    };
+  }
+
+  function postQueryRequest(query: QueryRequest, cursor?: DynamoCursor): void {
+    if (query.type === "runScan") {
+      postMessage({
+        type: "runScan",
+        cursor,
+      });
+      return;
+    }
+
+    postMessage({
+      ...query,
+      cursor,
+    });
+  }
+
+  function clearQueryInputs(): void {
+    partitionKeyValue = "";
+    sortKeyValue = "";
+  }
+
   function postMessage(message: WebviewToExtensionMessage): void {
     vscode.postMessage(message);
   }
@@ -526,11 +609,12 @@
           <span>Mode</span>
           <select
             disabled={loading}
-            on:change={(event) => switchMode(event.currentTarget.value as ExplorerMode)}
+            on:change={(event) =>
+              switchMode(event.currentTarget.value as ExplorerMode)}
             value={mode}
           >
             <option value="scan">Scan table</option>
-            <option disabled={queryIndexes.length === 0} value="query-index">Query GSI</option>
+            <option value="query">Query</option>
           </select>
         </label>
 
@@ -538,7 +622,7 @@
           <button
             aria-label={mode === "scan" ? "Run Scan" : "Run Query"}
             class="run-button"
-            disabled={loading || (mode === "query-index" && !canRunQuery)}
+            disabled={loading || (mode === "query" && !canRunQuery)}
             on:click={runActiveRequest}
             type="button"
           >
@@ -547,39 +631,59 @@
         </div>
       </div>
 
-      {#if mode === "query-index"}
+      {#if mode === "query"}
         <div class="query-fields">
-          <label class="field">
-            <span>Index</span>
-            <select
-              disabled={loading || queryIndexes.length === 0}
-              on:change={(event) => selectIndex(event.currentTarget.value)}
-              value={selectedIndexName}
-            >
-              {#each queryIndexes as index (index.name)}
-                <option value={index.name}>{index.name}</option>
-              {/each}
-            </select>
-          </label>
-
-          {#if selectedIndex}
+          {#if queryIndexes.length > 0}
             <label class="field">
-              <span>{selectedIndex.partitionKey.name}</span>
+              <span>Target</span>
+              <select
+                disabled={loading}
+                on:change={(event) =>
+                  selectQueryTarget(
+                    event.currentTarget.value as "table" | "index",
+                  )}
+                value={queryTarget}
+              >
+                <option value="table">Table</option>
+                <option value="index">GSI</option>
+              </select>
+            </label>
+          {/if}
+
+          {#if queryTarget === "index"}
+            <label class="field">
+              <span>Index</span>
+              <select
+                disabled={loading || queryIndexes.length === 0}
+                on:change={(event) => selectIndex(event.currentTarget.value)}
+                value={selectedIndexName}
+              >
+                {#each queryIndexes as index (index.name)}
+                  <option value={index.name}>{index.name}</option>
+                {/each}
+              </select>
+            </label>
+          {/if}
+
+          {#if queryPartitionKey}
+            <label class="field">
+              <span>{queryPartitionKey.name}</span>
               <input
                 disabled={loading}
-                on:input={(event) => updatePartitionKey(event.currentTarget.value)}
-                placeholder={selectedIndex.partitionKey.type}
+                on:input={(event) =>
+                  updatePartitionKey(event.currentTarget.value)}
+                placeholder={queryPartitionKey.type}
                 value={partitionKeyValue}
               />
             </label>
 
-            {#if selectedIndex.sortKey}
+            {#if querySortKey}
               <label class="field">
-                <span>{selectedIndex.sortKey.name}</span>
+                <span>{querySortKey.name}</span>
                 <input
                   disabled={loading}
                   on:input={(event) => updateSortKey(event.currentTarget.value)}
-                  placeholder={selectedIndex.sortKey.type}
+                  placeholder={querySortKey.type}
                   value={sortKeyValue}
                 />
               </label>
@@ -599,7 +703,9 @@
         <span>Saved!</span>
       {/if}
       {#if dirtyCellCount > 0}
-        <span>{dirtyCellCount} field{dirtyCellCount === 1 ? "" : "s"} staged</span>
+        <span
+          >{dirtyCellCount} field{dirtyCellCount === 1 ? "" : "s"} staged</span
+        >
         <button
           class="save-link"
           disabled={!canSave}
@@ -907,5 +1013,4 @@
     outline: 1px solid var(--focus);
     outline-offset: -1px;
   }
-
 </style>

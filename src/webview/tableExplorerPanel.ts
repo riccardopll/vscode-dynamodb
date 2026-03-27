@@ -1,7 +1,11 @@
 import * as vscode from "vscode";
 
 import { DynamoService, getErrorMessage } from "../aws/dynamoService";
-import type { ConnectionSelection, TableMetadata } from "../types";
+import type {
+  ConnectionSelection,
+  DynamoCursor,
+  TableMetadata,
+} from "../types";
 import { getTableExplorerHtml } from "./html";
 import type {
   ExplorerBootstrap,
@@ -75,8 +79,6 @@ export class TableExplorerPanel implements vscode.Disposable {
     private readonly pageSize: number,
   ) {
     const bootstrap: ExplorerBootstrap = {
-      profile: connection.profile,
-      region: connection.region,
       pageSize,
       metadata,
     };
@@ -109,58 +111,14 @@ export class TableExplorerPanel implements vscode.Disposable {
     message: WebviewToExtensionMessage,
   ): Promise<void> {
     switch (message.type) {
-      case "copyItem":
-        await vscode.env.clipboard.writeText(
-          JSON.stringify(message.item, null, 2),
-        );
-        return;
       case "saveItems":
         await this.withLoading(async () => this.saveItems(message.items));
         return;
       case "runScan":
-        await this.withLoading(async () => {
-          const result = await this.service.scanTable(
-            this.connection,
-            this.metadata.tableName,
-            this.pageSize,
-            message.cursor,
-          );
-
-          this.postMessage({
-            type: "results",
-            mode: "scan",
-            append: Boolean(message.cursor),
-            items: result.items,
-            cursor: result.lastEvaluatedKey,
-          });
-        });
+        await this.withLoading(async () => this.runScan(message.cursor));
         return;
       case "runQuery":
-        await this.withLoading(async () => {
-          const index = this.metadata.globalSecondaryIndexes.find(
-            (candidate) => candidate.name === message.indexName,
-          );
-          if (!index) {
-            throw new Error(`Index "${message.indexName}" was not found.`);
-          }
-
-          const result = await this.service.queryIndex(this.connection, {
-            tableName: this.metadata.tableName,
-            index,
-            partitionKeyValue: message.partitionKeyValue,
-            sortKeyValue: message.sortKeyValue,
-            pageSize: this.pageSize,
-            cursor: message.cursor,
-          });
-
-          this.postMessage({
-            type: "results",
-            mode: "query-index",
-            append: Boolean(message.cursor),
-            items: result.items,
-            cursor: result.lastEvaluatedKey,
-          });
-        });
+        await this.withLoading(async () => this.runQuery(message));
     }
   }
 
@@ -191,6 +149,80 @@ export class TableExplorerPanel implements vscode.Disposable {
 
   private postMessage(message: ExtensionToWebviewMessage): void {
     void this.panel.webview.postMessage(message);
+  }
+
+  private async runScan(cursor?: DynamoCursor) {
+    const result = await this.service.scanTable(
+      this.connection,
+      this.metadata.tableName,
+      this.pageSize,
+      cursor,
+    );
+
+    this.postResults(result.items, result.lastEvaluatedKey, Boolean(cursor));
+  }
+
+  private async runQuery(
+    message: Extract<WebviewToExtensionMessage, { type: "runQuery" }>,
+  ) {
+    const result =
+      message.target === "table"
+        ? await this.service.queryTable(this.connection, {
+            tableName: this.metadata.tableName,
+            metadata: this.metadata,
+            partitionKeyValue: message.partitionKeyValue,
+            sortKeyValue: message.sortKeyValue,
+            pageSize: this.pageSize,
+            cursor: message.cursor,
+          })
+        : await this.queryIndex(message);
+
+    this.postResults(
+      result.items,
+      result.lastEvaluatedKey,
+      Boolean(message.cursor),
+    );
+  }
+
+  private async queryIndex(
+    message: Extract<
+      WebviewToExtensionMessage,
+      { type: "runQuery"; target: "index" }
+    >,
+  ) {
+    const indexName = message.indexName;
+    if (!indexName) {
+      throw new Error("Select an index before running a query.");
+    }
+
+    const index = this.metadata.globalSecondaryIndexes.find(
+      (candidate) => candidate.name === indexName,
+    );
+    if (!index) {
+      throw new Error(`Index "${indexName}" was not found.`);
+    }
+
+    return this.service.queryIndex(this.connection, {
+      tableName: this.metadata.tableName,
+      index,
+      partitionKeyValue: message.partitionKeyValue,
+      sortKeyValue: message.sortKeyValue,
+      pageSize: this.pageSize,
+      cursor: message.cursor,
+    });
+  }
+
+  private postResults(
+    items: Record<string, unknown>[],
+    cursor: DynamoCursor,
+    append: boolean,
+  ): void {
+    this.postMessage({
+      type: "results",
+      append,
+      items,
+      cursor,
+    });
   }
 
   private async saveItems(

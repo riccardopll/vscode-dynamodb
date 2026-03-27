@@ -65,10 +65,6 @@ export function formatEditableValue(value: unknown): string {
   return JSON.stringify(value);
 }
 
-export function isStructuredValue(value: unknown): boolean {
-  return Array.isArray(value) || (typeof value === "object" && value !== null);
-}
-
 export function parseEditedValue(
   originalValue: unknown,
   draftText: string,

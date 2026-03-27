@@ -35,7 +35,7 @@ export interface TableMetadata {
   globalSecondaryIndexes: IndexMetadata[];
 }
 
-export type ExplorerMode = "scan" | "query-index";
+export type ExplorerMode = "scan" | "query";
 
 export interface ResultPage {
   items: Record<string, unknown>[];

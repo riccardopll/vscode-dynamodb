@@ -2,7 +2,7 @@ import * as assert from "assert";
 
 import {
   buildItemKey,
-  buildIndexQueryInput,
+  buildQueryInput,
   buildReplaceItemTransactionInput,
   buildUpdateItemInput,
   collectResultPage,
@@ -35,18 +35,16 @@ suite("DynamoDB service helpers", () => {
   };
 
   test("builds a GSI query with partition and sort key equality", () => {
-    const input = buildIndexQueryInput({
+    const input = buildQueryInput({
       tableName: "Orders",
-      index: {
-        name: "CustomerCreatedAtIndex",
-        partitionKey: {
-          name: "customerId",
-          type: "S",
-        },
-        sortKey: {
-          name: "createdAt",
-          type: "N",
-        },
+      indexName: "CustomerCreatedAtIndex",
+      partitionKey: {
+        name: "customerId",
+        type: "S",
+      },
+      sortKey: {
+        name: "createdAt",
+        type: "N",
       },
       partitionKeyValue: "cust#1",
       sortKeyValue: "1700000000",
@@ -58,6 +56,25 @@ suite("DynamoDB service helpers", () => {
     assert.deepStrictEqual(input.ExpressionAttributeNames, {
       "#pk": "customerId",
       "#sk": "createdAt",
+    });
+  });
+
+  test("builds a table query with partition and sort key equality", () => {
+    const input = buildQueryInput({
+      tableName: "Orders",
+      partitionKey: compositeKeyMetadata.partitionKey,
+      sortKey: compositeKeyMetadata.sortKey,
+      partitionKeyValue: "tenant-1",
+      sortKeyValue: "42",
+      pageSize: 25,
+    });
+
+    assert.strictEqual(input.TableName, "Orders");
+    assert.strictEqual(input.IndexName, undefined);
+    assert.strictEqual(input.KeyConditionExpression, "#pk = :pk AND #sk = :sk");
+    assert.deepStrictEqual(input.ExpressionAttributeNames, {
+      "#pk": "tenantId",
+      "#sk": "orderId",
     });
   });
 
@@ -101,10 +118,7 @@ suite("DynamoDB service helpers", () => {
 
       if (cursor === firstCursor) {
         return {
-          Items: [
-            { id: { S: "2" } },
-            { id: { S: "3" } },
-          ],
+          Items: [{ id: { S: "2" } }, { id: { S: "3" } }],
           LastEvaluatedKey: secondCursor,
         };
       }

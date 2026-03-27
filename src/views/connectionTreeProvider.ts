@@ -2,12 +2,9 @@ import * as vscode from "vscode";
 
 import type { SessionState } from "../state/sessionState";
 
-type ConnectionItemKind = "profile" | "region" | "refresh" | "empty";
-
 class ConnectionTreeItem extends vscode.TreeItem {
   public constructor(
     label: string,
-    public readonly kind: ConnectionItemKind,
     options?: {
       description?: string;
       command?: vscode.Command;
@@ -44,14 +41,14 @@ export class ConnectionTreeProvider implements vscode.TreeDataProvider<Connectio
     const connection = this.sessionState.getConnection();
     if (!connection) {
       return [
-        new ConnectionTreeItem("No AWS profiles found", "empty", {
+        new ConnectionTreeItem("No AWS profiles found", {
           iconPath: new vscode.ThemeIcon("warning"),
         }),
       ];
     }
 
     return [
-      new ConnectionTreeItem("Profile", "profile", {
+      new ConnectionTreeItem("Profile", {
         description: connection.profile,
         iconPath: new vscode.ThemeIcon("account"),
         command: {
@@ -59,7 +56,7 @@ export class ConnectionTreeProvider implements vscode.TreeDataProvider<Connectio
           title: "Select AWS Profile",
         },
       }),
-      new ConnectionTreeItem("Region", "region", {
+      new ConnectionTreeItem("Region", {
         description: connection.region,
         iconPath: new vscode.ThemeIcon("globe"),
         command: {
@@ -67,7 +64,7 @@ export class ConnectionTreeProvider implements vscode.TreeDataProvider<Connectio
           title: "Select Region",
         },
       }),
-      new ConnectionTreeItem("Refresh", "refresh", {
+      new ConnectionTreeItem("Refresh", {
         iconPath: new vscode.ThemeIcon("refresh"),
         command: {
           command: "dynamodb.refreshProfiles",
