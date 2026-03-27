@@ -36,12 +36,23 @@
   "contributes": {
     "commands": [
       {
+        "command": "dynamodb.executeQuery",
+        "title": "Execute Query",
+        "category": "DynamoDB"
+      },
+      {
         "command": "dynamodb.saveTableChanges",
         "title": "Save Table Changes",
         "category": "DynamoDB"
       }
     ],
     "keybindings": [
+      {
+        "command": "dynamodb.executeQuery",
+        "mac": "cmd+enter",
+        "key": "ctrl+enter",
+        "when": "activeWebviewPanelId == dynamodbTableExplorer"
+      },
       {
         "command": "dynamodb.saveTableChanges",
         "mac": "cmd+s",

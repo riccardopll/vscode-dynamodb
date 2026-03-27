@@ -69,6 +69,18 @@ export class TableExplorerPanel implements vscode.Disposable {
     return true;
   }
 
+  public static requestRunForActivePanel(): boolean {
+    const activePanel = TableExplorerPanel.activePanel;
+    if (!activePanel || !activePanel.panel.active) {
+      return false;
+    }
+
+    activePanel.postMessage({
+      type: "executeRequested",
+    });
+    return true;
+  }
+
   private constructor(
     private readonly panelKey: string,
     private readonly panel: vscode.WebviewPanel,

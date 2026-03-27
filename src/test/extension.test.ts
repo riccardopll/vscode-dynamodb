@@ -21,6 +21,7 @@ suite("Extension Test Suite", () => {
     assert.ok(commands.includes("dynamodb.refreshProfiles"));
     assert.ok(commands.includes("dynamodb.refreshTables"));
     assert.ok(commands.includes("dynamodb.openTableExplorer"));
+    assert.ok(commands.includes("dynamodb.executeQuery"));
     assert.ok(commands.includes("dynamodb.saveTableChanges"));
   });
 });

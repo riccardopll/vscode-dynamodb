@@ -169,6 +169,9 @@
             showSavedMessage();
           }
           return;
+        case "executeRequested":
+          runActiveRequest();
+          return;
         case "saveRequested":
           saveChanges();
           return;
@@ -603,94 +606,89 @@
 
 <div class="shell">
   <section class="controls-panel">
-    <div class="controls-stack">
-      <div class="primary-controls">
-        <label class="field mode-field">
-          <span>Mode</span>
-          <select
-            disabled={loading}
-            on:change={(event) =>
-              switchMode(event.currentTarget.value as ExplorerMode)}
-            value={mode}
-          >
-            <option value="scan">Scan table</option>
-            <option value="query">Query</option>
-          </select>
-        </label>
-
-        <div class="actions">
-          <button
-            aria-label={mode === "scan" ? "Run Scan" : "Run Query"}
-            class="run-button"
-            disabled={loading || (mode === "query" && !canRunQuery)}
-            on:click={runActiveRequest}
-            type="button"
-          >
-            ▶
-          </button>
-        </div>
-      </div>
+    <div class="controls-row">
+      <label class="field mode-field">
+        <span>Mode</span>
+        <select
+          disabled={loading}
+          on:change={(event) =>
+            switchMode(event.currentTarget.value as ExplorerMode)}
+          value={mode}
+        >
+          <option value="scan">Scan</option>
+          <option value="query">Query</option>
+        </select>
+      </label>
 
       {#if mode === "query"}
-        <div class="query-fields">
-          {#if queryIndexes.length > 0}
-            <label class="field">
-              <span>Target</span>
-              <select
-                disabled={loading}
-                on:change={(event) =>
-                  selectQueryTarget(
-                    event.currentTarget.value as "table" | "index",
-                  )}
-                value={queryTarget}
-              >
-                <option value="table">Table</option>
-                <option value="index">GSI</option>
-              </select>
-            </label>
-          {/if}
+        {#if queryIndexes.length > 0}
+          <label class="field query-field">
+            <span>Target</span>
+            <select
+              disabled={loading}
+              on:change={(event) =>
+                selectQueryTarget(
+                  event.currentTarget.value as "table" | "index",
+                )}
+              value={queryTarget}
+            >
+              <option value="table">Table</option>
+              <option value="index">GSI</option>
+            </select>
+          </label>
+        {/if}
 
-          {#if queryTarget === "index"}
-            <label class="field">
-              <span>Index</span>
-              <select
-                disabled={loading || queryIndexes.length === 0}
-                on:change={(event) => selectIndex(event.currentTarget.value)}
-                value={selectedIndexName}
-              >
-                {#each queryIndexes as index (index.name)}
-                  <option value={index.name}>{index.name}</option>
-                {/each}
-              </select>
-            </label>
-          {/if}
+        {#if queryTarget === "index"}
+          <label class="field query-field">
+            <span>Index</span>
+            <select
+              disabled={loading || queryIndexes.length === 0}
+              on:change={(event) => selectIndex(event.currentTarget.value)}
+              value={selectedIndexName}
+            >
+              {#each queryIndexes as index (index.name)}
+                <option value={index.name}>{index.name}</option>
+              {/each}
+            </select>
+          </label>
+        {/if}
 
-          {#if queryPartitionKey}
-            <label class="field">
-              <span>{queryPartitionKey.name}</span>
+        {#if queryPartitionKey}
+          <label class="field query-field">
+            <span>{queryPartitionKey.name}</span>
+            <input
+              disabled={loading}
+              on:input={(event) => updatePartitionKey(event.currentTarget.value)}
+              placeholder={queryPartitionKey.type}
+              value={partitionKeyValue}
+            />
+          </label>
+
+          {#if querySortKey}
+            <label class="field query-field">
+              <span>{querySortKey.name}</span>
               <input
                 disabled={loading}
-                on:input={(event) =>
-                  updatePartitionKey(event.currentTarget.value)}
-                placeholder={queryPartitionKey.type}
-                value={partitionKeyValue}
+                on:input={(event) => updateSortKey(event.currentTarget.value)}
+                placeholder={querySortKey.type}
+                value={sortKeyValue}
               />
             </label>
-
-            {#if querySortKey}
-              <label class="field">
-                <span>{querySortKey.name}</span>
-                <input
-                  disabled={loading}
-                  on:input={(event) => updateSortKey(event.currentTarget.value)}
-                  placeholder={querySortKey.type}
-                  value={sortKeyValue}
-                />
-              </label>
-            {/if}
           {/if}
-        </div>
+        {/if}
       {/if}
+
+      <div class="actions">
+        <button
+          aria-label={mode === "scan" ? "Run Scan" : "Run Query"}
+          class="run-button"
+          disabled={loading || (mode === "query" && !canRunQuery)}
+          on:click={runActiveRequest}
+          type="button"
+        >
+          ▶
+        </button>
+      </div>
     </div>
 
     <div class="meta-row">
@@ -829,13 +827,7 @@
     padding: 10px;
   }
 
-  .controls-stack {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .primary-controls {
+  .controls-row {
     display: flex;
     align-items: end;
     gap: 10px;
@@ -843,15 +835,8 @@
   }
 
   .mode-field {
-    flex: 0 1 320px;
-    width: min(320px, 100%);
+    flex: 1 1 0;
     min-width: 0;
-  }
-
-  .query-fields {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
   }
 
   .field {
@@ -860,8 +845,8 @@
     min-width: 0;
   }
 
-  .query-fields .field {
-    flex: 1 1 180px;
+  .query-field {
+    flex: 1 1 0;
   }
 
   .field span,

@@ -39,6 +39,9 @@ export type ExtensionToWebviewMessage =
       loading: boolean;
     }
   | {
+      type: "executeRequested";
+    }
+  | {
       type: "saveRequested";
     }
   | {

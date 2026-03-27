@@ -161,6 +161,15 @@ export async function activate(
         }
       },
     ),
+    vscode.commands.registerCommand("dynamodb.executeQuery", async () => {
+      if (TableExplorerPanel.requestRunForActivePanel()) {
+        return;
+      }
+
+      void vscode.window.showWarningMessage(
+        "Open a DynamoDB table explorer to run a scan or query.",
+      );
+    }),
     vscode.commands.registerCommand("dynamodb.saveTableChanges", async () => {
       if (TableExplorerPanel.requestSaveForActivePanel()) {
         return;

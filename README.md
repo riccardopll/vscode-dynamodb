@@ -18,8 +18,9 @@ Install from the [VS Code Marketplace](https://marketplace.visualstudio.com/item
 
 ## Configuration
 
-| Type       | Name                        | Description                                                        | Default          |
-| ---------- | --------------------------- | ------------------------------------------------------------------ | ---------------- |
-| Setting    | `dynamodb.defaultRegion`    | Fallback AWS region when the selected profile does not define one. | `us-east-1`      |
-| Setting    | `dynamodb.pageSize`         | Maximum number of items to load per request.                       | `50`             |
-| Keybinding | `dynamodb.saveTableChanges` | Saves item edits while a table explorer is focused.                | `Cmd+S`/`Ctrl+S` |
+| Type       | Name                        | Description                                                        | Default                  |
+| ---------- | --------------------------- | ------------------------------------------------------------------ | ------------------------ |
+| Setting    | `dynamodb.defaultRegion`    | Fallback AWS region when the selected profile does not define one. | `us-east-1`              |
+| Setting    | `dynamodb.pageSize`         | Maximum number of items to load per request.                       | `50`                     |
+| Keybinding | `dynamodb.saveTableChanges` | Saves item edits while a table explorer is focused.                | `Cmd+S`/`Ctrl+S`         |
+| Keybinding | `dynamodb.executeQuery`     | Runs the current scan or query while a table explorer is focused.  | `Cmd+Enter`/`Ctrl+Enter` |
