@@ -27,10 +27,31 @@
   export let cellDrafts: Record<string, string> = {};
   export let invalidCellKeys: string[] = [];
   export let busy = false;
+  export let deletedRows: string[] = [];
 
   const dispatch = createEventDispatcher<{
     updateCellDraft: UpdateCellDraftDetail;
+    deleteRow: { item: Record<string, unknown> };
   }>();
+
+  // Delete (Cmd+Backspace on macOS), only while the row itself has focus.
+  function handleRowKeydown(
+    event: KeyboardEvent,
+    item: Record<string, unknown>,
+  ): void {
+    const isShortcut = navigator.platform.startsWith("Mac")
+      ? event.key === "Backspace" && event.metaKey
+      : event.key === "Delete";
+    if (
+      isShortcut &&
+      event.target === event.currentTarget &&
+      !event.repeat &&
+      !busy
+    ) {
+      event.preventDefault();
+      dispatch("deleteRow", { item });
+    }
+  }
 
   function getDisplayValue(
     item: Record<string, unknown>,
@@ -150,7 +171,16 @@
       <tbody>
         {#each items as item, index (`${index}`)}
           {@const rowKey = getRowKey(item, metadata)}
-          <tr class:dirty-row={isDirtyRow(rowKey)}>
+          <tr
+            class:dirty-row={isDirtyRow(rowKey)}
+            class:deleted-row={deletedRows.includes(rowKey)}
+            data-vscode-context={JSON.stringify({
+              webviewSection: "row",
+              rowKey,
+            })}
+            tabindex="0"
+            on:keydown={(event) => handleRowKeydown(event, item)}
+          >
             {#each columns as column (column)}
               {@const displayValue = getDisplayValue(item, column)}
               {@const editable = isEditableCell(item, column)}
@@ -174,7 +204,7 @@
                 {#if editable}
                   <input
                     class="cell-editor"
-                    disabled={busy}
+                    disabled={busy || deletedRows.includes(rowKey)}
                     on:input={(event) =>
                       updateCellDraft(item, column, event.currentTarget.value)}
                     size={getEditorSize(item, column)}
@@ -308,12 +338,28 @@
     background: var(--row-even);
   }
 
+  tbody tr:focus-visible {
+    outline: 1px solid var(--vscode-focusBorder);
+    outline-offset: -1px;
+  }
+
   tbody tr:hover td {
     background: var(--row-hover);
   }
 
   tbody tr.dirty-row td {
     background: var(--row-dirty);
+  }
+
+  tbody tr.deleted-row td {
+    background: var(
+      --vscode-diffEditor-removedLineBackground,
+      var(--vscode-inputValidation-errorBackground)
+    );
+  }
+
+  tbody tr.deleted-row :is(.cell-value, .cell-editor) {
+    text-decoration: line-through;
   }
 
   td.dirty-cell {

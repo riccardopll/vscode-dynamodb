@@ -66,6 +66,11 @@
         "command": "dynamodb.saveTableChanges",
         "title": "Save Table Changes",
         "category": "DynamoDB"
+      },
+      {
+        "command": "dynamodb.deleteTableRow",
+        "title": "Delete Row",
+        "category": "DynamoDB"
       }
     ],
     "keybindings": [
@@ -107,6 +112,17 @@
         {
           "command": "dynamodb.saveTableChanges",
           "when": "false"
+        },
+        {
+          "command": "dynamodb.deleteTableRow",
+          "when": "false"
+        }
+      ],
+      "webview/context": [
+        {
+          "command": "dynamodb.deleteTableRow",
+          "when": "webviewId == 'dynamodbTableExplorer' && webviewSection == 'row'",
+          "group": "dynamodb"
         }
       ],
       "view/title": [
@@ -188,6 +204,7 @@
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^3.6.2",
+    "dynalite": "^4.0.0",
     "esbuild": "^0.27.3",
     "eslint": "^9.39.3",
     "eslint-config-prettier": "^10.1.8",

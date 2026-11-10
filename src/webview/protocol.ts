@@ -31,9 +31,14 @@ export type WebviewToExtensionMessage =
         originalItem: Record<string, unknown>;
         updatedItem: Record<string, unknown>;
       }[];
+      deletes: Record<string, unknown>[];
     };
 
 export type ExtensionToWebviewMessage =
+  | {
+      type: "deleteRequested";
+      rowKey: string;
+    }
   | {
       type: "setLoading";
       loading: boolean;
@@ -60,4 +65,5 @@ export type ExtensionToWebviewMessage =
         originalItem: Record<string, unknown>;
         item: Record<string, unknown>;
       }[];
+      deletedKeys: Record<string, unknown>[];
     };

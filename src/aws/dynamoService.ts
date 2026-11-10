@@ -1,4 +1,7 @@
 import {
+  ConditionalCheckFailedException,
+  DeleteItemCommand,
+  type DeleteItemCommandInput,
   DescribeTableCommand,
   ListTablesCommand,
   TransactWriteItemsCommand,
@@ -178,6 +181,20 @@ export class DynamoService {
     );
   }
 
+  public async deleteItem(
+    connection: ConnectionSelection,
+    input: DeleteItemCommandInput,
+  ): Promise<void> {
+    try {
+      await createDynamoDbClient(connection).send(new DeleteItemCommand(input));
+    } catch (error) {
+      if (error instanceof ConditionalCheckFailedException) {
+        throw new Error("The item no longer exists; nothing was deleted.");
+      }
+      throw error;
+    }
+  }
+
   public async updateItem(
     connection: ConnectionSelection,
     input: UpdateItemInputArgs,
@@ -314,6 +331,48 @@ export function buildItemKey(
   item: Record<string, unknown>,
 ): Record<string, AttributeValue> {
   return marshall(buildPrimaryKeyRecord(metadata, item));
+}
+
+// The existence condition makes a delete of a missing item fail instead of
+// silently succeeding. Binary keys reach the extension host as the same
+// Uint8Array the item was read with. Number keys beyond what a JavaScript
+// number holds exactly cannot be sent back exactly and are refused.
+export function buildDeleteItemInput(
+  metadata: TableMetadata,
+  itemKey: Record<string, unknown>,
+): DeleteItemCommandInput {
+  const toKeyValue = (key: KeyMetadata): AttributeValue => {
+    const value = itemKey[key.name];
+    if (key.type === "S" && typeof value === "string") {
+      return { S: value };
+    }
+    if (key.type === "B" && value instanceof Uint8Array) {
+      return { B: value };
+    }
+    if (key.type === "N" && typeof value === "number") {
+      const digits = String(value).replace(/e.*$|[-.]/gu, "");
+      if (
+        Number.isSafeInteger(value) ||
+        (Number.isFinite(value) &&
+          !Number.isInteger(value) &&
+          digits.replace(/^0+/u, "").length <= 15)
+      ) {
+        return { N: String(value) };
+      }
+    }
+    throw new Error(
+      `Key "${key.name}" cannot be sent back exactly, so the item cannot be deleted from here.`,
+    );
+  };
+
+  return {
+    TableName: metadata.tableName,
+    Key: Object.fromEntries(
+      getPrimaryKeys(metadata).map((key) => [key.name, toKeyValue(key)]),
+    ),
+    ConditionExpression: "attribute_exists(#pk)",
+    ExpressionAttributeNames: { "#pk": metadata.partitionKey.name },
+  };
 }
 
 export function buildUpdateItemInput({

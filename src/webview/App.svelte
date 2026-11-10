@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
 
+  import { buildPrimaryKeyRecord } from "../itemKeys";
   import type { DynamoCursor, ExplorerMode, KeyMetadata } from "../types";
   import ResultsTable from "./components/ResultsTable.svelte";
   import {
@@ -76,6 +77,7 @@
   let dirtyColumnsByRowKey: Record<string, string[]> = {};
   let cellDrafts: Record<string, string> = {};
   let invalidCells: Record<string, string> = {};
+  let pendingDeletes: Record<string, Record<string, unknown>> = {};
   let savedMessageVisible = false;
   let savedMessageTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -109,9 +111,15 @@
     (count, rowKey) => count + dirtyColumnsByRowKey[rowKey].length,
     0,
   );
-  $: hasPendingEdits = dirtyRowKeys.length > 0 || invalidCellKeys.length > 0;
+  $: deletedRowKeys = Object.keys(pendingDeletes);
+  $: hasPendingEdits =
+    dirtyRowKeys.length > 0 ||
+    invalidCellKeys.length > 0 ||
+    deletedRowKeys.length > 0;
   $: canSave =
-    !loading && dirtyRowKeys.length > 0 && invalidCellKeys.length === 0;
+    !loading &&
+    (dirtyRowKeys.length > 0 || deletedRowKeys.length > 0) &&
+    invalidCellKeys.length === 0;
   $: busyLabel =
     busyAction === "save" && loading
       ? "Saving..."
@@ -144,6 +152,14 @@
           pendingPageIndex = undefined;
           clearEditingState();
           return;
+        case "deleteRequested":
+          items
+            .filter(
+              (item) =>
+                getRowKey(item, bootstrap.metadata) === message.rowKey,
+            )
+            .forEach(toggleDelete);
+          return;
         case "itemsSaved":
           for (const entry of message.items) {
             applySavedItem(
@@ -151,8 +167,9 @@
               getRowKey(entry.originalItem, bootstrap.metadata),
             );
           }
+          message.deletedKeys.forEach(applyDeletedItem);
           requestError = "";
-          if (message.items.length > 0) {
+          if (message.items.length + message.deletedKeys.length > 0) {
             showSavedMessage();
           }
           return;
@@ -388,17 +405,13 @@
         originalItem: originalRowsByKey[rowKey],
         updatedItem: editedRowsByKey[rowKey],
       })),
+      deletes: Object.values(pendingDeletes),
     });
   }
 
   function confirmDiscardPendingEdits(): boolean {
     if (!hasPendingEdits) {
       return true;
-    }
-
-    const shouldDiscard = window.confirm("Discard unsaved changes?");
-    if (!shouldDiscard) {
-      return false;
     }
 
     clearEditingState();
@@ -428,6 +441,38 @@
     clearRowEditingState(previousRowKey);
   }
 
+  // Marks a row for deletion, or unmarks it. Nothing is deleted until save.
+  function toggleDelete(item: Record<string, unknown>): void {
+    const rowKey = getRowKey(item, bootstrap.metadata);
+    if (loading) {
+      return;
+    }
+
+    clearSavedMessage();
+    if (rowKey in pendingDeletes) {
+      pendingDeletes = omitKey(pendingDeletes, rowKey);
+    } else {
+      // The delete wins over any edits staged on the row.
+      clearRowEditingState(rowKey);
+      pendingDeletes = {
+        ...pendingDeletes,
+        [rowKey]: buildPrimaryKeyRecord(bootstrap.metadata, item),
+      };
+    }
+  }
+
+  function applyDeletedItem(itemKey: Record<string, unknown>): void {
+    const rowKey = getRowKey(itemKey, bootstrap.metadata);
+    pages = pages.map((page) => ({
+      ...page,
+      items: page.items.filter(
+        (item) => getRowKey(item, bootstrap.metadata) !== rowKey,
+      ),
+    }));
+    pendingDeletes = omitKey(pendingDeletes, rowKey);
+    clearRowEditingState(rowKey);
+  }
+
   function clearRowEditingState(rowKey: string): void {
     originalRowsByKey = omitKey(originalRowsByKey, rowKey);
     editedRowsByKey = omitKey(editedRowsByKey, rowKey);
@@ -442,6 +487,7 @@
     dirtyColumnsByRowKey = {};
     cellDrafts = {};
     invalidCells = {};
+    pendingDeletes = {};
     clearSavedMessage();
   }
 
@@ -702,17 +748,36 @@
       {#if !loading && savedMessageVisible}
         <span>Saved!</span>
       {/if}
+      {#if deletedRowKeys.length > 0}
+        <span
+          >{deletedRowKeys.length} row{deletedRowKeys.length === 1 ? "" : "s"} to
+          delete</span
+        >
+      {/if}
       {#if dirtyCellCount > 0}
         <span
           >{dirtyCellCount} field{dirtyCellCount === 1 ? "" : "s"} staged</span
         >
+      {/if}
+      {#if dirtyCellCount + deletedRowKeys.length > 0}
         <button
           class="save-link"
           disabled={!canSave}
           on:click={saveChanges}
           type="button"
         >
-          Save changes?
+          <svg
+            aria-hidden="true"
+            fill="currentColor"
+            height="14"
+            viewBox="0 0 16 16"
+            width="14"
+          >
+            <path
+              d="M14.414 3.207L12.793 1.586C12.421 1.213 11.905 1 11.379 1H3C1.897 1 1 1.897 1 3V13C1 14.103 1.897 15 3 15H13C14.103 15 15 14.103 15 13V4.621C15 4.095 14.787 3.579 14.414 3.207ZM9 2V3.5C9 3.776 8.776 4 8.5 4H6.5C6.224 4 6 3.776 6 3.5V2H9ZM5 14V9.5C5 9.224 5.224 9 5.5 9H10.5C10.776 9 11 9.224 11 9.5V14H5ZM14 13C14 13.551 13.551 14 13 14H12V9.5C12 8.673 11.327 8 10.5 8H5.5C4.673 8 4 8.673 4 9.5V14H3C2.449 14 2 13.551 2 13V3C2 2.449 2.449 2 3 2H5V3.5C5 4.327 5.673 5 6.5 5H8.5C9.327 5 10 4.327 10 3.5V2H11.379C11.642 2 11.9 2.107 12.086 2.293L13.707 3.914C13.893 4.1 14 4.358 14 4.621V13Z"
+            />
+          </svg>
+          Save
         </button>
       {/if}
       {#if pages.length > 0}
@@ -760,6 +825,8 @@
           {cellDrafts}
           {invalidCellKeys}
           on:updateCellDraft={handleUpdateCellDraft}
+          deletedRows={deletedRowKeys}
+          on:deleteRow={(event) => toggleDelete(event.detail.item)}
         />
       {:else}
         <div class="empty-state">
@@ -978,6 +1045,10 @@
     font: inherit;
     line-height: inherit;
     text-decoration: underline;
+  }
+
+  .save-link svg {
+    margin-right: 4px;
   }
 
   .save-link:hover:not(:disabled) {

@@ -241,6 +241,14 @@ export async function activate(
         "Open a DynamoDB table explorer to run a scan or query.",
       );
     }),
+    vscode.commands.registerCommand(
+      "dynamodb.deleteTableRow",
+      async (context?: { rowKey?: string }) => {
+        if (context?.rowKey) {
+          TableExplorerPanel.requestDeleteForActivePanel(context.rowKey);
+        }
+      },
+    ),
     vscode.commands.registerCommand("dynamodb.saveTableChanges", async () => {
       if (TableExplorerPanel.requestSaveForActivePanel()) {
         return;
