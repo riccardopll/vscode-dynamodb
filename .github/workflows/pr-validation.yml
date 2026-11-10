@@ -1,8 +1,5 @@
 name: PR Validation
 
-# Validates pull requests before they reach main (where release.yml publishes).
-# Only `pull_request` is used, so each commit is validated once and there are no
-# duplicate push + pull_request runs. Needs no secrets, so it works for forks.
 on:
   pull_request:
     branches:
