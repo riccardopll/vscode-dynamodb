@@ -14,8 +14,7 @@ Install from the [VS Code Marketplace](https://marketplace.visualstudio.com/item
 - Browse DynamoDB tables directly from the sidebar
 - Switch between AWS profiles and regions
 - Run table scans and query global secondary indexes
-- Edit item values inline and save changes
-- Delete an item from the row context menu, or with `Delete` (`Cmd+Backspace` on macOS) while a row has focus. The row is marked in red and is deleted when you save; repeat the action to unmark it. This needs the `dynamodb:DeleteItem` permission.
+- Edit and delete items inline and save changes
 
 ## Configuration
 
